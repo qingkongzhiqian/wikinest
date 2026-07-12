@@ -11,3 +11,18 @@ test('startServer binds to 127.0.0.1 and assigns a free port', async () => {
   assert.equal(res.status, 200);
   await new Promise((r) => server.close(r));
 });
+
+import { bootBackend } from '../desktop/boot.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+test('bootBackend uses the given vault dir and serves on 127.0.0.1', async () => {
+  const vault = await mkdtemp(path.join(tmpdir(), 'wiki-vault-'));
+  const { server, port } = await bootBackend({ vaultDir: vault });
+  assert.ok(port > 0);
+  const res = await fetch(`http://127.0.0.1:${port}/api/tree`);
+  assert.equal(res.status, 200);
+  await new Promise((r) => server.close(r));
+  await rm(vault, { recursive: true, force: true });
+});
