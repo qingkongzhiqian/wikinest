@@ -1,0 +1,25 @@
+{
+  "name": "personal-wiki",
+  "version": "1.0.0",
+  "description": "Markdown personal wiki with a web viewer/editor, plus MCP and CLI write access",
+  "type": "module",
+  "bin": {
+    "wiki": "bin/wiki.js"
+  },
+  "scripts": {
+    "serve": "node bin/wiki.js serve",
+    "mcp": "node bin/wiki.js mcp"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1080.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.19.2",
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.9.0",
+    "markdown-it": "^14.1.0",
+    "zod": "^3.23.8"
+  }
+}
