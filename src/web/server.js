@@ -444,11 +444,12 @@ export function createApp() {
   return app;
 }
 
-export function startServer({ port = 4321 } = {}) {
+export function startServer({ port = 4321, host } = {}) {
   const app = createApp();
   return new Promise((resolve) => {
-    const server = app.listen(port, () => {
-      console.log(`📚 personal-wiki running at http://localhost:${port}`);
+    const server = app.listen(port, host, () => {
+      const actualPort = server.address().port;
+      console.log(`📚 personal-wiki running at http://${host || 'localhost'}:${actualPort}`);
       console.log(`   content dir: ${CONTENT_DIR}`);
       console.log(`   MCP endpoint: POST /mcp`);
       if (getWebPassword()) console.log('   web auth: login page + session ENABLED');

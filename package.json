@@ -1,14 +1,15 @@
 {
-  "name": "personal-wiki",
+  "name": "personal-wiki-desktop",
   "version": "1.0.0",
-  "description": "Markdown personal wiki with a web viewer/editor, plus MCP and CLI write access",
+  "description": "Local-first desktop app for the personal-wiki markdown knowledge base",
   "type": "module",
   "bin": {
     "wiki": "bin/wiki.js"
   },
   "scripts": {
     "serve": "node bin/wiki.js serve",
-    "mcp": "node bin/wiki.js mcp"
+    "mcp": "node bin/wiki.js mcp",
+    "test": "node --test test/"
   },
   "engines": {
     "node": ">=18"
