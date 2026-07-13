@@ -1,0 +1,43 @@
+# Wikinest systemd service (web + MCP server).
+#
+# Install:
+#   1. Put the project at /opt/wikinest (or edit WorkingDirectory/ExecStart below).
+#   2. Create /opt/wikinest/.env from .env.example and fill
+#      WIKI_TOKEN / WIKI_PASSWORD / LLM_* / S3_* as needed.
+#   3. Create a dedicated user and hand it the files:
+#        sudo useradd -r -s /usr/sbin/nologin wikinest
+#        sudo chown -R wikinest:wikinest /opt/wikinest
+#   4. sudo cp deploy/wikinest.service /etc/systemd/system/wikinest.service
+#   5. sudo systemctl daemon-reload && sudo systemctl enable --now wikinest
+#   6. Verify:  systemctl status wikinest   |   journalctl -u wikinest -f
+#
+# Binds 127.0.0.1:4321 by default — put Caddy/Nginx in front for public HTTPS.
+# If `node` is not at /usr/bin/node, run `which node` and update ExecStart.
+
+[Unit]
+Description=Wikinest — local-first markdown wiki (web + MCP server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wikinest
+Group=wikinest
+WorkingDirectory=/opt/wikinest
+Environment=NODE_ENV=production
+Environment=WIKI_PORT=4321
+# bin/wiki.js auto-loads /opt/wikinest/.env — no need to duplicate env here.
+ExecStart=/usr/bin/node bin/wiki.js serve
+Restart=on-failure
+RestartSec=3
+
+# --- Hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# The notes dir (and its .index/) is the only path the service must write to.
+ReadWritePaths=/opt/wikinest/content
+
+[Install]
+WantedBy=multi-user.target

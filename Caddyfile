@@ -1,0 +1,6 @@
+# Caddy reverse proxy for Wikinest. WIKI_DOMAIN is injected by docker-compose.
+# Caddy auto-provisions a real HTTPS cert for a public domain, or an internal
+# self-signed one for localhost.
+{$WIKI_DOMAIN} {
+	reverse_proxy wiki:4321
+}

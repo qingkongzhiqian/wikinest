@@ -1,0 +1,42 @@
+# Wikinest + Caddy (automatic HTTPS).
+#
+# Quick start:
+#   cp .env.example .env    # fill WIKI_DOMAIN / WIKI_TOKEN / WIKI_PASSWORD / LLM_* / S3_*
+#   docker compose up -d --build
+#
+# Notes persist on the host at ./content. For local testing set WIKI_DOMAIN=localhost
+# (Caddy will serve an internal self-signed cert).
+
+services:
+  wiki:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Behind Caddy on the internal network: trust one proxy hop so req.ip (and
+    # thus per-IP rate limiting) reflects the real client via X-Forwarded-For.
+    environment:
+      WIKI_TRUST_PROXY: "1"
+    volumes:
+      - ./content:/app/content
+    # Not published to the host — only Caddy reaches it over the compose network.
+    expose:
+      - "4321"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - wiki
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      WIKI_DOMAIN: ${WIKI_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

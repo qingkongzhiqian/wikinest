@@ -1,0 +1,20 @@
+# Keep the build context (and image) lean and free of secrets / local data.
+node_modules
+dist
+release
+out
+.git
+.gitignore
+.env
+.env.local
+*.local
+content
+*.log
+npm-debug.log*
+logs
+.DS_Store
+# Desktop-only assets aren't needed by the server image.
+desktop
+build
+.idea
+.vscode
