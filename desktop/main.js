@@ -3,12 +3,24 @@ import Store from 'electron-store';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootBackend } from './boot.js';
-import { readSettings, writeSettings } from './config.js';
+import { readSettings, writeSettings, syncSettingsToEnv } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const store = new Store();
 
 let settingsWin = null;
+let mainWin = null;
+
+// 打开设置:优先复用主窗口里「样式一致」的页内弹窗(点左下角齿轮那个),
+// 只有在主窗口不可用时才退回独立的设置窗口。
+function openSettingsInApp() {
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('open-settings');
+    mainWin.focus();
+    return;
+  }
+  openSettings();
+}
 
 const MAX_RECENT_VAULTS = 8;
 
@@ -110,7 +122,7 @@ function buildMenu() {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettings },
+        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettingsInApp },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -125,7 +137,7 @@ function buildMenu() {
         { label: '打开文件夹…', accelerator: 'CmdOrCtrl+O', click: openVaultDialog },
         { label: '打开最近', submenu: recentVaultsSubmenu() },
         { type: 'separator' },
-        ...(isMac ? [] : [{ label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettings }, { type: 'separator' }]),
+        ...(isMac ? [] : [{ label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettingsInApp }, { type: 'separator' }]),
         isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },
@@ -162,16 +174,26 @@ async function createWindow() {
     height: 800,
     title: `Wikinest — ${path.basename(vaultDir)}`,
     titleBarStyle: 'hiddenInset', // Mac 上更贴合原生;其它平台自动回退
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      // 复用设置窗口的 preload,把 wikiSettings IPC 桥暴露给前端页面,
+      // 让页内(左下角齿轮)的设置弹窗可以读写配置、更换知识库。
+      preload: path.join(__dirname, 'settings-preload.cjs'),
+    },
   });
+  mainWin = win;
+  win.on('closed', () => { if (mainWin === win) mainWin = null; });
   // 让标题固定显示当前知识库名(否则会被前端页面的 <title> 覆盖)。
   win.on('page-title-updated', (e) => e.preventDefault());
   // `?desktop=1` 让前端知道自己跑在 Electron 里,从而为 macOS 交通灯按钮预留
   // 顶部空间,并把顶栏设为可拖拽窗口的区域(浏览器里此标记无副作用)。
   await win.loadURL(`http://127.0.0.1:${port}/?desktop=1`);
 
-  // 首启且未配置大模型时,自动弹出设置,方便用户立刻填 key 启用 AI 功能。
-  if (!settings.LLM_API_KEY) openSettings();
+  // 首启且未配置大模型时,自动弹出页内设置弹窗,方便用户立刻填 key 启用 AI 功能。
+  if (!settings.LLM_API_KEY) {
+    win.webContents.once('did-finish-load', () => win.webContents.send('open-settings'));
+  }
 }
 
 // --- IPC:设置窗口读写配置 ---
@@ -180,11 +202,20 @@ ipcMain.handle('settings:info', () => ({
   vaultDir: store.get('vaultDir') || '',
   version: app.getVersion(),
 }));
-ipcMain.handle('settings:save', (_e, data) => {
-  writeSettings(store, data);
-  // 重启应用,让新配置干净生效(重新注入 env、重建后端与所有模块级单例)。
-  app.relaunch();
-  app.exit(0);
+ipcMain.handle('settings:save', async (_e, data) => {
+  const clean = writeSettings(store, data);
+  // 热更新,无需重启:后端 express 就跑在本进程里,LLM / Embedding 每次请求都
+  // 实时读 process.env,所以刷新 env 即可立即生效;更换 env 后再重置 S3 客户端
+  // 单例,让存储配置也生效。(更换知识库走 chooseVault,那条路径才需要重启。)
+  syncSettingsToEnv(clean);
+  try {
+    const { resetStorageClient } = await import('../src/core/storage.js');
+    resetStorageClient();
+  } catch (err) {
+    console.error('reset storage client failed:', err.message);
+  }
+  // 通知前端重新拉取各能力状态,刷新按钮/入口的显隐。
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('settings-updated');
   return { ok: true };
 });
 ipcMain.handle('settings:close', () => {

@@ -45,3 +45,18 @@ export function applySettingsToEnv(settings = {}) {
     if (typeof v === 'string' && v) process.env[k] = v;
   }
 }
+
+/**
+ * Live-sync every managed key into process.env: set non-empty values and DELETE
+ * cleared ones. Unlike applySettingsToEnv (startup, additive), this makes a
+ * removed/blank field actually take effect at runtime, so the desktop app can
+ * hot-apply LLM / Embedding / S3 changes without restarting.
+ * WIKI_CONTENT_DIR is intentionally not managed here (vault switch restarts).
+ */
+export function syncSettingsToEnv(settings = {}) {
+  for (const k of SETTING_KEYS) {
+    const v = settings && typeof settings[k] === 'string' ? settings[k].trim() : '';
+    if (v) process.env[k] = v;
+    else delete process.env[k];
+  }
+}

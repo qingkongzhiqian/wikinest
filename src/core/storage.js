@@ -60,6 +60,15 @@ function client(c) {
   return _client;
 }
 
+/**
+ * Drop the cached S3 client so the next upload/delete rebuilds it from the
+ * current env. Call this after live-updating the S3_* settings (desktop app)
+ * so the change takes effect without a restart.
+ */
+export function resetStorageClient() {
+  _client = undefined;
+}
+
 // A short, filesystem/URL-safe slug from the original name (sans extension).
 function slugify(name) {
   const base = path.basename(name || '', path.extname(name || ''));

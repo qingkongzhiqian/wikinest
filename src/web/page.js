@@ -28,18 +28,23 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
             "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
     --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --maxw: 1080px;
-    --rail: 60px;             /* collapsed icon rail width */
-    --rail-open: 244px;       /* expanded sidebar width */
+    --side-w: 244px;          /* sidebar width when shown (Craft-style show/hide) */
+    /* One shared duration + easing for the whole sidebar open/close motion so
+       the width, the pushed-over content and the chevron all move in lockstep.
+       The curve is a smooth "decelerate" (iOS-like) so it feels quick + settled. */
+    --side-dur: .24s;
+    --side-ease: cubic-bezier(.33, .9, .25, 1);
+    --titlebar: 36px;         /* desktop: clean top strip for macOS traffic lights */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
     font-family: var(--sans); color: var(--fg); background: var(--bg);
     font-size: 15px; -webkit-font-smoothing: antialiased;
-    padding-left: var(--rail);   /* collapsed: reserve just the icon rail */
-    transition: padding-left .18s ease;
+    padding-left: 0;   /* sidebar hidden reserves no space */
+    transition: padding-left var(--side-dur) var(--side-ease);
   }
-  body.sidebar-open { padding-left: var(--rail-open); }  /* pinned open */
+  body.sidebar-open { padding-left: var(--side-w); }  /* sidebar shown */
   a { color: inherit; text-decoration: none; }
   button {
     font-family: inherit; cursor: pointer; border: none; background: none;
@@ -87,27 +92,61 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
 
   /* ---------- Left icon rail (hover to expand) ---------- */
   #sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail);
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--side-w);
     background: #fff; border-right: 1px solid var(--faint); z-index: 30;
     display: flex; flex-direction: column; padding: 10px 0 12px;
-    overflow: hidden; transition: width .18s ease, box-shadow .18s ease;
+    overflow: hidden; will-change: transform;
+    transition: transform var(--side-dur) var(--side-ease);
   }
-  /* Pinned open: reserve space (no overlay shadow). Collapsed: hover previews. */
-  body.sidebar-open #sidebar { width: var(--rail-open); }
-  body:not(.sidebar-open) #sidebar:hover { width: var(--rail-open); box-shadow: 0 14px 50px rgba(0,0,0,.10); }
+  /* Craft-style: the panel slides fully off-screen when hidden; the floating
+     #sideCtrl button brings it back. */
+  body:not(.sidebar-open) #sidebar { transform: translateX(-100%); }
+
+  /* Floating sidebar control: a collapse toggle + a ⌄ menu living in the top
+     strip. Shown → sits at the panel's top-right; hidden → slides to the top
+     left (past the macOS traffic lights) as a small pill. */
+  #sideCtrl {
+    position: fixed; top: 6px; left: calc(var(--side-w) - 74px); height: 30px; z-index: 45;
+    display: flex; align-items: center; gap: 1px;
+    transition: left var(--side-dur) var(--side-ease);
+    -webkit-app-region: no-drag;
+  }
+  body:not(.sidebar-open) #sideCtrl {
+    left: 12px;
+    background: rgba(255,255,255,.92); border: 1px solid var(--faint); border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.07); padding: 0 3px;
+    backdrop-filter: saturate(180%) blur(8px);
+  }
+  html.desktop body:not(.sidebar-open) #sideCtrl { left: 78px; }
+  .ctrl-btn {
+    width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    color: var(--muted); background: transparent; transition: background .12s, color .12s;
+  }
+  .ctrl-btn:hover { background: var(--hover); color: var(--fg); }
+  .ctrl-btn svg { fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .ctrl-btn.collapse svg { width: 18px; height: 18px; }
+  .ctrl-btn.menu svg { width: 14px; height: 14px; }
+
+  #sideMenuPop {
+    position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px; z-index: 46;
+    background: var(--bg); border: 1px solid var(--faint); border-radius: 12px;
+    box-shadow: 0 16px 44px rgba(0,0,0,.16); padding: 6px; display: none;
+  }
+  #sideMenuPop.show { display: block; }
+  .menu-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--fg);
+    background: transparent; transition: background .12s;
+  }
+  .menu-item:hover { background: var(--hover); }
+  .menu-item svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
+
   .side-brand {
     display: flex; align-items: center; gap: 11px; height: 45px;
     padding: 0 19px; margin-bottom: 8px; flex-shrink: 0; color: var(--fg); cursor: pointer;
   }
-  .side-toggle { margin-left: auto; display: grid; place-items: center; color: var(--muted); }
-  .side-toggle svg {
-    width: 18px; height: 18px; fill: none; stroke: currentColor;
-    stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
-    transition: transform .18s ease;
-  }
-  .side-brand:hover .side-toggle { color: var(--fg); }
-  /* Chevron points the way it will move the panel. */
-  body:not(.sidebar-open) .side-toggle svg { transform: rotate(180deg); }
   .side-brand .mark { flex-shrink: 0; display: grid; place-items: center; }
   .side-brand .mark svg { width: 21px; height: 21px; fill: none; stroke: currentColor;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -129,10 +168,8 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     margin-left: auto; font-size: 12px; color: var(--muted);
     background: var(--chip); border-radius: 999px; padding: 1px 8px; min-width: 22px; text-align: center;
   }
-  /* Labels / counts appear when the rail is expanded (pinned or hovered). */
-  .side-label, .side-count { opacity: 0; transition: opacity .12s; pointer-events: none; }
-  #sidebar:hover .side-label, #sidebar:hover .side-count,
-  body.sidebar-open .side-label, body.sidebar-open .side-count { opacity: 1; pointer-events: auto; }
+  /* The panel is either fully shown or fully hidden now, so labels/counts are
+     simply always visible while it's on screen (no rail-collapse fade needed). */
 
   /* Category section (only meaningful when expanded, so hidden while collapsed) */
   .side-sec { padding: 14px 8px 2px; overflow: hidden; }
@@ -146,25 +183,78 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     margin: 0 8px 0 7px;
   }
   .side-item.active .cat-dot { background: var(--fg); }
-  body:not(.sidebar-open) #sidebar:not(:hover) .side-sec { display: none; }
 
-  .mcp-card {
-    margin: auto 10px 4px; padding: 12px 13px; border: 1px solid var(--faint);
-    border-radius: 12px; background: linear-gradient(180deg, #fafafa, #f4f4f5);
-    overflow: hidden;
+  /* Compact MCP status pill at the bottom (shrunk from the old big card). */
+  .mcp-mini {
+    margin: auto 12px 4px; display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 10px; border: 1px solid var(--faint);
+    background: #fafafa; cursor: pointer; overflow: hidden;
+    transition: border-color .12s, background .12s;
   }
-  .mcp-head { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+  .mcp-mini:hover { border-color: #d8d8d8; background: #fff; }
   .mcp-dot {
     width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0;
     box-shadow: 0 0 0 3px rgba(34,197,94,.16);
   }
-  .mcp-title { font-size: 12.5px; font-weight: 600; color: var(--fg); }
-  .mcp-addr {
-    margin-top: 9px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
-    background: #fff; border: 1px solid var(--faint); border-radius: 7px; padding: 5px 8px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  .mcp-text {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .mcp-addr:hover { border-color: #d0d0d0; color: var(--fg); }
+
+  /* ---------- Settings modal (in-page, desktop) ---------- */
+  .set-overlay {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: flex-start; justify-content: center;
+    background: rgba(0,0,0,.36); backdrop-filter: blur(3px);
+    padding: 48px 20px; overflow: auto;
+  }
+  .set-overlay.show { display: flex; }
+  .set-modal {
+    width: 100%; max-width: 620px; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--faint); border-radius: 16px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.24); overflow: hidden;
+    display: flex; flex-direction: column; max-height: calc(100vh - 96px);
+  }
+  .set-head {
+    display: flex; align-items: baseline; gap: 10px; padding: 22px 24px 6px; flex-shrink: 0;
+  }
+  .set-head h2 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .set-head .set-lead { color: var(--muted); font-size: 13px; }
+  .set-body { padding: 8px 24px 4px; overflow: auto; }
+  .set-group { border: 1px solid var(--faint); border-radius: 12px; padding: 4px 16px 14px; margin: 14px 0; }
+  .set-group > .set-legend {
+    font-size: 13px; font-weight: 600; color: var(--fg); padding-top: 14px;
+  }
+  .set-group > .set-note { font-size: 12px; color: var(--muted); margin: 4px 0 12px; }
+  .set-field { margin-bottom: 12px; }
+  .set-field:last-child { margin-bottom: 4px; }
+  .set-field label { display: block; font-size: 12.5px; font-weight: 500; margin-bottom: 5px; }
+  .set-field input {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--faint); border-radius: 9px;
+    font-family: inherit; font-size: 13.5px; color: var(--fg); background: #fff; outline: none;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .set-field input:focus { border-color: #c4c4c4; box-shadow: 0 0 0 3px rgba(0,0,0,.05); }
+  .set-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .set-vault { display: flex; align-items: center; gap: 10px; }
+  .set-vault code {
+    flex: 1; font-family: var(--mono); font-size: 12px; color: var(--muted);
+    background: var(--chip); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere;
+  }
+  .set-foot {
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    padding: 14px 24px; border-top: 1px solid var(--faint); background: var(--bg);
+  }
+  .set-foot .set-status { font-size: 12.5px; color: var(--muted); }
+  .set-foot .spacer { flex: 1; }
+  .set-btn {
+    font-family: inherit; font-size: 13.5px; padding: 8px 18px; border-radius: 999px;
+    border: 1px solid var(--faint); background: #fff; color: var(--fg); transition: background .12s, opacity .12s;
+  }
+  .set-btn:hover { background: var(--hover); }
+  .set-btn.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
+  .set-btn.primary:hover { background: var(--fg); opacity: .85; }
+  @media (max-width: 560px) { .set-grid2 { grid-template-columns: 1fr; } }
 
   .container { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
 
@@ -467,10 +557,10 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     .article-body, .article-body.no-toc { grid-template-columns: minmax(0, 760px); }
     .toc { display: none; }
   }
-  /* Touch / narrow screens: no hover, so drop the rail entirely. */
+  /* Narrow screens: the panel floats over the content instead of pushing it. */
   @media (max-width: 760px) {
-    body, body.sidebar-open { padding-left: 0; }
-    #sidebar { display: none; }
+    body.sidebar-open { padding-left: 0; }
+    body.sidebar-open #sidebar { box-shadow: 0 14px 50px rgba(0,0,0,.14); }
   }
   @media (max-width: 640px) {
     .page-title { font-size: 38px; }
@@ -481,26 +571,57 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   }
 
   /* ---------- Desktop (Electron) window chrome ---------- */
-  /* Only applies inside the Electron shell (html.desktop). Reserves room for
-     the macOS traffic-light buttons so they never overlap the sidebar, and
+  /* Only applies inside the Electron shell (html.desktop). Reserves a clean
+     36px title strip at the very top for the macOS traffic-light buttons so
+     they never collide with the sidebar divider, the icons or the content, and
      turns the top strip / nav into a draggable window region. No effect in a
      normal browser tab, where -webkit-app-region is simply ignored. */
-  html.desktop #sidebar { padding-top: 36px; }
+  html.desktop #sidebar { padding-top: var(--titlebar); border-right: none; }
   html.desktop #sidebar::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 36px;
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: var(--titlebar);
     -webkit-app-region: drag; z-index: 40;
   }
+  /* Draw the sidebar's right-hand divider only BELOW the title strip, so the
+     top 36px reads as one uninterrupted strip that the traffic lights sit in. */
+  html.desktop #sidebar::after {
+    content: ''; position: absolute; top: var(--titlebar); right: 0; bottom: 0; width: 1px;
+    background: var(--faint); pointer-events: none;
+  }
   html.desktop #nav { -webkit-app-region: drag; }
+  /* Push the nav's content below the title strip so the search bar no longer
+     crowds the traffic lights; the strip above stays empty + draggable. */
+  html.desktop .nav-inner { padding-top: 32px; }
   html.desktop #nav .cmdbar,
   html.desktop #nav .nav-right { -webkit-app-region: no-drag; }
 </style>
 </head>
 <body class="sidebar-open">
+  <div id="sideCtrl">
+    <button class="ctrl-btn collapse" id="sideCollapse" title="显示 / 隐藏侧栏">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+    </button>
+    <button class="ctrl-btn menu" id="sideMenu" title="更多">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div id="sideMenuPop">
+      <button class="menu-item" id="miSettings" style="display:none">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置…
+      </button>
+      <button class="menu-item" id="miVault" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        更换知识库…
+      </button>
+      <button class="menu-item" id="miCopy">
+        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        复制 MCP 地址
+      </button>
+    </div>
+  </div>
   <aside id="sidebar">
-    <div class="side-brand" id="sideToggle" title="收起 / 展开侧栏">
+    <div class="side-brand" id="sideBrand" title="Wikinest">
       <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
       <span class="side-label">Wikinest</span>
-      <span class="side-toggle side-label"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></span>
     </div>
     <nav class="side-nav">
       <button class="side-item" data-side="all">
@@ -524,9 +645,9 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
       <div class="side-sec-label">分类</div>
       <div class="side-cats" id="sideCats"></div>
     </div>
-    <div class="mcp-card">
-      <div class="mcp-head"><span class="mcp-dot"></span><span class="mcp-title side-label">MCP 写入 · 已连接</span></div>
-      <div class="mcp-addr side-label" id="mcpAddr" title="点击复制">加载中…</div>
+    <div class="mcp-mini" id="mcpAddr" title="MCP 写入 · 已连接,点击复制地址">
+      <span class="mcp-dot"></span>
+      <span class="mcp-text">加载中…</span>
     </div>
   </aside>
 
@@ -617,6 +738,112 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     <span class="sb-count">已选 <b id="selCount">0</b> 篇</span>
     <button class="sb-cancel" id="selCancel">取消</button>
     <button class="sb-go" id="selGo">✨ 合成为一篇</button>
+  </div>
+
+  <div class="set-overlay" id="setOverlay">
+    <div class="set-modal" role="dialog" aria-modal="true" aria-label="设置">
+      <div class="set-head">
+        <h2>设置</h2>
+        <span class="set-lead">保存在本机 · 大模型 / 存储改动即时生效,无需重启</span>
+      </div>
+      <div class="set-body">
+        <div class="set-group">
+          <div class="set-legend">知识库(Vault)</div>
+          <div class="set-note">当前打开的文件夹。更换后应用会重启并读取新文件夹里的笔记。</div>
+          <div class="set-vault">
+            <code id="setVaultPath">—</code>
+            <button class="set-btn" id="setChooseVault">更换…</button>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">大模型(LLM)</div>
+          <div class="set-note">OpenAI 兼容接口即可:OpenAI / DeepSeek / 通义千问 / 自建。填了才会启用自动分类、整理、综述、问答。</div>
+          <div class="set-field">
+            <label for="LLM_BASE_URL">Base URL</label>
+            <input id="LLM_BASE_URL" placeholder="https://api.deepseek.com/v1" />
+          </div>
+          <div class="set-field">
+            <label for="LLM_API_KEY">API Key</label>
+            <input id="LLM_API_KEY" type="password" placeholder="sk-..." />
+          </div>
+          <div class="set-field">
+            <label for="LLM_MODEL">模型</label>
+            <input id="LLM_MODEL" placeholder="deepseek-chat / gpt-4o-mini / qwen-plus" />
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">向量检索(Embedding,可选)</div>
+          <div class="set-note">留空则复用上面的 LLM 配置。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),在此单独指定。默认模型 text-embedding-v4。</div>
+          <div class="set-field">
+            <label for="EMBED_BASE_URL">Embed Base URL</label>
+            <input id="EMBED_BASE_URL" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
+          </div>
+          <div class="set-grid2">
+            <div class="set-field">
+              <label for="EMBED_API_KEY">Embed API Key</label>
+              <input id="EMBED_API_KEY" type="password" placeholder="sk-..." />
+            </div>
+            <div class="set-field">
+              <label for="EMBED_MODEL">Embed 模型</label>
+              <input id="EMBED_MODEL" placeholder="text-embedding-v4" />
+            </div>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">图片存储(S3 兼容,可选)</div>
+          <div class="set-note">AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用。填了才能在编辑器里粘贴 / 拖拽上传图片。</div>
+          <div class="set-grid2">
+            <div class="set-field">
+              <label for="S3_BUCKET">Bucket</label>
+              <input id="S3_BUCKET" placeholder="my-wiki-images" />
+            </div>
+            <div class="set-field">
+              <label for="S3_PUBLIC_BASE_URL">公开访问 URL 前缀</label>
+              <input id="S3_PUBLIC_BASE_URL" placeholder="https://images.example.com" />
+            </div>
+          </div>
+          <div class="set-grid2">
+            <div class="set-field">
+              <label for="S3_ACCESS_KEY_ID">Access Key ID</label>
+              <input id="S3_ACCESS_KEY_ID" />
+            </div>
+            <div class="set-field">
+              <label for="S3_SECRET_ACCESS_KEY">Secret Access Key</label>
+              <input id="S3_SECRET_ACCESS_KEY" type="password" />
+            </div>
+          </div>
+          <div class="set-grid2">
+            <div class="set-field">
+              <label for="S3_ENDPOINT">Endpoint(R2/OSS/MinIO 需要)</label>
+              <input id="S3_ENDPOINT" placeholder="https://<account>.r2.cloudflarestorage.com" />
+            </div>
+            <div class="set-field">
+              <label for="S3_REGION">Region</label>
+              <input id="S3_REGION" placeholder="auto" />
+            </div>
+          </div>
+          <div class="set-grid2">
+            <div class="set-field">
+              <label for="S3_KEY_PREFIX">Key 前缀</label>
+              <input id="S3_KEY_PREFIX" placeholder="wiki-images/" />
+            </div>
+            <div class="set-field">
+              <label for="S3_FORCE_PATH_STYLE">Path-style(MinIO 填 true)</label>
+              <input id="S3_FORCE_PATH_STYLE" placeholder="true / 留空" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="set-foot">
+        <span class="set-status" id="setStatus"></span>
+        <span class="spacer"></span>
+        <button class="set-btn" id="setCancel">取消</button>
+        <button class="set-btn primary" id="setSave">保存</button>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -716,9 +943,18 @@ function applySidebar(open) {
   try { localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0'); } catch (e) {}
 }
 
+function copyMcpAddr() {
+  navigator.clipboard.writeText(location.origin).then(() => toast('已复制地址')).catch(() => {});
+}
+
 function wireSidebar() {
-  const toggle = $('sideToggle');
-  if (toggle) toggle.onclick = () => applySidebar(!document.body.classList.contains('sidebar-open'));
+  const brand = $('sideBrand');
+  if (brand) brand.onclick = () => { showIndex(); selectTab('全部'); };
+
+  // Craft-style collapse toggle: slide the whole panel in / out.
+  const collapse = $('sideCollapse');
+  if (collapse) collapse.onclick = () => applySidebar(!document.body.classList.contains('sidebar-open'));
+
   document.querySelectorAll('.side-item').forEach(b => {
     b.onclick = () => {
       const act = b.dataset.side;
@@ -728,13 +964,33 @@ function wireSidebar() {
       else if (act === 'recent') { showIndex(); showRecent(); }
     };
   });
+
+  // ⌄ dropdown menu (settings / switch vault / copy MCP address).
+  const menuBtn = $('sideMenu');
+  const pop = $('sideMenuPop');
+  const closeMenu = () => pop && pop.classList.remove('show');
+  if (menuBtn && pop) {
+    menuBtn.onclick = (e) => { e.stopPropagation(); pop.classList.toggle('show'); };
+    document.addEventListener('click', (e) => {
+      if (pop.classList.contains('show') && !pop.contains(e.target) && !menuBtn.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  }
+  // Settings + switch-vault need the desktop IPC bridge; hidden in the browser.
+  if (window.wikiSettings) {
+    const mi = $('miSettings');
+    if (mi) { mi.style.display = ''; mi.onclick = () => { closeMenu(); openSettings(); }; }
+    const mv = $('miVault');
+    if (mv) { mv.style.display = ''; mv.onclick = () => { closeMenu(); try { window.wikiSettings.chooseVault(); } catch (e) {} }; }
+  }
+  const mc = $('miCopy');
+  if (mc) mc.onclick = () => { closeMenu(); copyMcpAddr(); };
+
   const addr = $('mcpAddr');
   if (addr) {
-    addr.textContent = 'mcp wiki:' + location.host;
-    addr.onclick = async () => {
-      try { await navigator.clipboard.writeText(location.origin); toast('已复制地址'); }
-      catch (e) { /* clipboard unavailable */ }
-    };
+    const t = addr.querySelector('.mcp-text');
+    if (t) t.textContent = 'mcp wiki:' + location.host;
+    addr.onclick = copyMcpAddr;
   }
 }
 
@@ -1317,29 +1573,15 @@ $('renameBtn').onclick = async () => {
 
 // ---------- categories ----------
 let classifyEnabled = false;
-api('/api/classify/status').then(s => { classifyEnabled = !!s.enabled; }).catch(() => {});
 
 // AI organize (tidy + synthesize) — same LLM config; gates the AI buttons.
 let organizeEnabled = false;
-api('/api/organize/status').then(s => {
-  organizeEnabled = !!s.enabled;
-  renderDigestBanner();
-  // The "选择"(multi-select → synthesize) flow needs the same LLM config.
-  if ($('selectBtn')) $('selectBtn').style.display = organizeEnabled ? '' : 'none';
-}).catch(() => {});
 
 $('selectBtn').onclick = () => toggleSelectMode();
 $('selCancel').onclick = () => toggleSelectMode(false);
 $('selGo').onclick = synthSelection;
 
 // ---------- ask (RAG) wiring ----------
-// Enable the ask affordances only when semantic search/embeddings are configured.
-api('/api/rag/status').then(s => {
-  ragEnabled = !!(s && s.enabled);
-  if ($('askNav')) $('askNav').style.display = ragEnabled ? '' : 'none';
-  if ($('cmdKbd')) $('cmdKbd').style.display = ragEnabled ? '' : 'none';
-  $('search').placeholder = ragEnabled ? '搜索或提问…' : '搜索全部笔记…';
-}).catch(() => {});
 
 $('askResult').addEventListener('click', (e) => {
   // Example-question chip → run that question.
@@ -1462,7 +1704,6 @@ async function autoClassifyCurrent() {
 
 // ---------- image upload (paste / drag-drop into the editor) ----------
 let uploadEnabled = false;
-api('/api/upload/status').then(s => { uploadEnabled = !!s.enabled; }).catch(() => {});
 
 // Insert text at the textarea caret, replacing the current selection.
 function insertAtCaret(ta, text) {
@@ -1622,9 +1863,108 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------- Settings modal (desktop only; backed by Electron IPC) ----------
+// window.wikiSettings is injected by desktop/settings-preload.cjs. In a normal
+// browser tab it's undefined, so the gear and modal stay hidden.
+const SETTING_KEYS = [
+  'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL',
+  'EMBED_BASE_URL', 'EMBED_API_KEY', 'EMBED_MODEL',
+  'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_PUBLIC_BASE_URL',
+  'S3_ENDPOINT', 'S3_REGION', 'S3_KEY_PREFIX', 'S3_FORCE_PATH_STYLE',
+];
+
+async function openSettings() {
+  if (!window.wikiSettings) return;
+  const overlay = $('setOverlay');
+  $('setStatus').textContent = '';
+  try {
+    const data = await window.wikiSettings.get();
+    for (const k of SETTING_KEYS) { const el = $(k); if (el) el.value = (data && data[k]) || ''; }
+  } catch (e) { /* ignore, show blanks */ }
+  try {
+    const info = await window.wikiSettings.info();
+    $('setVaultPath').textContent = (info && info.vaultDir) || '—';
+  } catch (e) { /* ignore */ }
+  overlay.classList.add('show');
+}
+
+function closeSettings() { $('setOverlay').classList.remove('show'); }
+
+function wireSettings() {
+  const overlay = $('setOverlay');
+  if (!overlay) return;
+  // The settings entry now lives in the sidebar's ⌄ menu (see wireSidebar);
+  // this just wires the modal itself.
+  $('setCancel').onclick = closeSettings;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) closeSettings();
+  });
+
+  $('setChooseVault').onclick = () => {
+    if (!window.wikiSettings) return;
+    $('setStatus').textContent = '若选择了新文件夹,应用将重启…';
+    window.wikiSettings.chooseVault();
+  };
+
+  $('setSave').onclick = async () => {
+    if (!window.wikiSettings) return;
+    const out = {};
+    for (const k of SETTING_KEYS) out[k] = ($(k)?.value || '').trim();
+    $('setStatus').textContent = '保存中…';
+    try {
+      // LLM / Embedding / S3 改动会热生效(后端刷新 env),无需重启。
+      await window.wikiSettings.save(out);
+      await refreshFeatureFlags();
+      closeSettings();
+      toast('设置已保存并生效');
+    } catch (e) { $('setStatus').textContent = '保存失败:' + e.message; }
+  };
+
+  // Menu (Cmd/Ctrl+,) and first-run can ask us to open the modal.
+  if (window.wikiSettings && window.wikiSettings.onOpenSettings) {
+    window.wikiSettings.onOpenSettings(() => openSettings());
+  }
+  // A settings save (from here or the fallback window) hot-applies on the
+  // backend; re-pull capability flags so the UI reflects it immediately.
+  if (window.wikiSettings && window.wikiSettings.onSettingsUpdated) {
+    window.wikiSettings.onSettingsUpdated(() => refreshFeatureFlags());
+  }
+}
+
+// Pull backend capability flags (AI classify / organize / RAG / upload) and
+// reflect them in the UI. Runs on load and again after a settings change, so
+// toggling AI or storage config takes effect with no restart or page reload.
+async function refreshFeatureFlags() {
+  const [c, o, r, u] = await Promise.all([
+    api('/api/classify/status').catch(() => ({})),
+    api('/api/organize/status').catch(() => ({})),
+    api('/api/rag/status').catch(() => ({})),
+    api('/api/upload/status').catch(() => ({})),
+  ]);
+  classifyEnabled = !!(c && c.enabled);
+  organizeEnabled = !!(o && o.enabled);
+  ragEnabled = !!(r && r.enabled);
+  uploadEnabled = !!(u && u.enabled);
+
+  // organize (tidy + synthesize) gates
+  renderDigestBanner();
+  if ($('selectBtn')) $('selectBtn').style.display = organizeEnabled ? '' : 'none';
+  // rag (ask) gates
+  if ($('askNav')) $('askNav').style.display = ragEnabled ? '' : 'none';
+  if ($('cmdKbd')) $('cmdKbd').style.display = ragEnabled ? '' : 'none';
+  $('search').placeholder = ragEnabled ? '搜索或提问…' : '搜索全部笔记…';
+}
+
 wireSidebar();
-// Default to pinned-open; honor the remembered choice if the user collapsed it.
-try { if (localStorage.getItem(SIDEBAR_KEY) === '0') applySidebar(false); } catch (e) {}
+wireSettings();
+refreshFeatureFlags();
+// Default to shown; honor a remembered "hidden" choice, and start hidden on
+// narrow screens where the panel would otherwise cover the content.
+try {
+  const saved = localStorage.getItem(SIDEBAR_KEY);
+  if (saved === '0' || (saved === null && window.innerWidth < 760)) applySidebar(false);
+} catch (e) {}
 setActiveSide('all');
 loadIndex();
 </script>
