@@ -11,7 +11,7 @@ export function isClassifyConfigured() {
   return isLLMConfigured();
 }
 
-function normalizeCategories(raw) {
+export function normalizeCategories(raw) {
   let arr = [];
   if (Array.isArray(raw)) arr = raw;
   else if (raw && Array.isArray(raw.categories)) arr = raw.categories;

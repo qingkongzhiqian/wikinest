@@ -10,7 +10,7 @@ import { askWiki, isRagConfigured } from '../core/rag.js';
 
 export function createMcpServer() {
   const server = new McpServer({
-    name: 'personal-wiki',
+    name: 'wikinest',
     version: '1.0.0',
   });
 
@@ -20,7 +20,7 @@ export function createMcpServer() {
     {
       title: 'Save conversation to wiki',
       description:
-        'Save a conversation or piece of writing into the personal wiki as a markdown note. ' +
+        'Save a conversation or piece of writing into your Wikinest as a markdown note. ' +
         'Use this at the end of a chat to archive what was discussed. Choose a descriptive ' +
         'path with subfolders, e.g. "chats/2026-07-06-mcp-setup".',
       inputSchema: {
@@ -169,5 +169,5 @@ export async function startMcp() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr is safe for logs; stdout is reserved for the MCP protocol.
-  console.error(`personal-wiki MCP server ready (content: ${CONTENT_DIR})`);
+  console.error(`Wikinest MCP server ready (content: ${CONTENT_DIR})`);
 }

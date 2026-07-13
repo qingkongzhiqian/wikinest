@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   listTree, readNote, writeNote, deleteNote, searchNotes, noteExists,
   CONTENT_DIR, getAllNotes, nextAvailablePath, moveNote,
@@ -52,6 +54,18 @@ export function createApp() {
   );
   app.use(express.json({ limit: '5mb' }));
 
+  // Serve front-end vendor libraries from local node_modules so the app works
+  // fully offline (no CDN). These are public library assets — registered before
+  // the auth guard so they load without a session, and long-cached since they're
+  // versioned by the dependency in package.json.
+  const nodeModules = path.resolve(fileURLToPath(import.meta.url), '../../../node_modules');
+  app.use('/vendor/highlight.js', express.static(path.join(nodeModules, 'highlight.js/styles'), {
+    maxAge: '7d', index: false,
+  }));
+  app.use('/vendor/mermaid', express.static(path.join(nodeModules, 'mermaid/dist'), {
+    maxAge: '7d', index: false,
+  }));
+
   const mcpLimiter = rateLimit({
     windowMs: 60_000,
     max: Number(process.env.WIKI_MCP_RATE_LIMIT) || 120,
@@ -86,6 +100,7 @@ export function createApp() {
   app.get('/login', (req, res) => {
     // No password configured, or already logged in → go straight to the app.
     if (!getWebPassword() || readSession(req)) return res.redirect(302, '/');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.type('html').send(LOGIN_HTML);
   });
   app.post('/login', loginLimiter, (req, res) => {
@@ -449,7 +464,7 @@ export function startServer({ port = 4321, host } = {}) {
   return new Promise((resolve) => {
     const server = app.listen(port, host, () => {
       const actualPort = server.address().port;
-      console.log(`📚 personal-wiki running at http://${host || 'localhost'}:${actualPort}`);
+      console.log(`📚 Wikinest running at http://${host || 'localhost'}:${actualPort}`);
       console.log(`   content dir: ${CONTENT_DIR}`);
       console.log(`   MCP endpoint: POST /mcp`);
       if (getWebPassword()) console.log('   web auth: login page + session ENABLED');

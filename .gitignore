@@ -1,2 +1,27 @@
+# Dependencies
 node_modules/
+
+# Secrets / local config
 .env
+.env.local
+*.local
+
+# User notes (the wiki's own content dir; keep private data out of the repo)
+content/
+
+# Build output (electron-builder)
+dist/
+release/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

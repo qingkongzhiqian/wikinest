@@ -6,7 +6,7 @@
 // Env:
 //   EMBED_BASE_URL   default: LLM_BASE_URL
 //   EMBED_API_KEY    default: LLM_API_KEY
-//   EMBED_MODEL      default: text-embedding-v3 (DashScope 通义 embedding)
+//   EMBED_MODEL      default: text-embedding-v4 (DashScope 通义 embedding)
 //   EMBED_TIMEOUT_MS default: 20000
 //   EMBED_BATCH      default: 10 (texts per request)
 

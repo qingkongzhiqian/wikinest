@@ -7,8 +7,15 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Personal Wiki</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" />
+<title>Wikinest</title>
+<script>
+  // 桌面端(Electron)会带上 ?desktop=1。尽早在 <head> 里同步打标记,
+  // 让下面的 .desktop 样式在首次绘制前生效,避免为窗口按钮腾位时的布局跳动。
+  if (new URLSearchParams(location.search).has('desktop')) {
+    document.documentElement.classList.add('desktop');
+  }
+</script>
+<link rel="stylesheet" href="/vendor/highlight.js/github.min.css" />
 <style>
   :root {
     --bg: #ffffff;
@@ -41,8 +48,8 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
 
   /* ---------- Top nav ---------- */
   #nav {
-    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.9);
-    backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--faint);
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.97);
+    border-bottom: 1px solid var(--faint);
   }
   .nav-inner {
     max-width: var(--maxw); margin: 0 auto; padding: 16px 24px;
@@ -472,20 +479,27 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     .list.as-list .row { grid-template-columns: 1fr; gap: 8px; }
     .row-meta { flex-direction: row; gap: 12px; }
   }
+
+  /* ---------- Desktop (Electron) window chrome ---------- */
+  /* Only applies inside the Electron shell (html.desktop). Reserves room for
+     the macOS traffic-light buttons so they never overlap the sidebar, and
+     turns the top strip / nav into a draggable window region. No effect in a
+     normal browser tab, where -webkit-app-region is simply ignored. */
+  html.desktop #sidebar { padding-top: 36px; }
+  html.desktop #sidebar::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 36px;
+    -webkit-app-region: drag; z-index: 40;
+  }
+  html.desktop #nav { -webkit-app-region: drag; }
+  html.desktop #nav .cmdbar,
+  html.desktop #nav .nav-right { -webkit-app-region: no-drag; }
 </style>
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', fontFamily: 'inherit' });
-  window.mermaid = mermaid;
-  // Content may already be on screen before mermaid finished loading.
-  if (window.__renderMermaid) window.__renderMermaid();
-</script>
 </head>
 <body class="sidebar-open">
   <aside id="sidebar">
     <div class="side-brand" id="sideToggle" title="收起 / 展开侧栏">
       <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-      <span class="side-label">Personal Wiki</span>
+      <span class="side-label">Wikinest</span>
       <span class="side-toggle side-label"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></span>
     </div>
     <nav class="side-nav">
@@ -1068,16 +1082,31 @@ function toast(msg, ms = 1800) {
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
+// Lazily load mermaid (a ~3MB module) only the first time a diagram actually
+// needs rendering. Most notes have none, so this keeps startup fast. Served
+// locally from /vendor (bundled in node_modules) so it works fully offline.
+let mermaidLoading = null;
+function ensureMermaid() {
+  if (window.mermaid) return Promise.resolve(window.mermaid);
+  if (!mermaidLoading) {
+    mermaidLoading = import('/vendor/mermaid/mermaid.esm.min.mjs')
+      .then((m) => {
+        const mermaid = m.default;
+        mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', fontFamily: 'inherit' });
+        window.mermaid = mermaid;
+        return mermaid;
+      });
+  }
+  return mermaidLoading;
+}
+
 // Turn any <pre class="mermaid"> blocks in the article into SVG diagrams.
-// Safe to call before mermaid finishes loading — it just no-ops until ready.
 async function renderMermaid() {
-  if (!window.mermaid) return;
   const nodes = [...$('content').querySelectorAll('pre.mermaid:not([data-processed])')];
   if (!nodes.length) return;
-  try { await window.mermaid.run({ nodes }); }
+  try { const mermaid = await ensureMermaid(); await mermaid.run({ nodes }); }
   catch (err) { console.error('mermaid render failed:', err); }
 }
-window.__renderMermaid = renderMermaid;
 
 // Build the left-hand table of contents from the article's headings, and
 // highlight the section currently in view (scroll spy).
@@ -1235,8 +1264,8 @@ async function updatePreview() {
       });
       $('preview').innerHTML = r.html || '';
       const nodes = [...$('preview').querySelectorAll('pre.mermaid:not([data-processed])')];
-      if (window.mermaid && nodes.length) {
-        try { await window.mermaid.run({ nodes }); } catch (e) { /* ignore */ }
+      if (nodes.length) {
+        try { const mermaid = await ensureMermaid(); await mermaid.run({ nodes }); } catch (e) { /* ignore */ }
       }
     } catch (e) { /* ignore transient render errors */ }
   }, 300);

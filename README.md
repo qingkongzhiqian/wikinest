@@ -1,6 +1,6 @@
-# Personal Wiki
+# Wikinest
 
-Markdown 个人知识库:文件按目录存 markdown,web 端查看/在线编辑,MCP 和 CLI 都能往里写文件。核心场景是每次和 AI 聊完,通过 MCP 把对话存进来。
+**Wikinest** 是一个本地优先(local-first)的 Markdown 个人知识库:文件按目录存 markdown,web 端查看/在线编辑,MCP 和 CLI 都能往里写文件,AI 负责自动整理、分类与调用。核心场景是每次和 AI 聊完,通过 MCP 把对话存进来。
 
 ## 结构
 
@@ -45,6 +45,8 @@ npm run desktop
 
 首次启动会让你选择一个文件夹作为 Vault,之后自动记住。数据即该文件夹里的 `.md` 文件,可随时用其它工具打开或备份。
 
+桌面版不用 `.env`:AI(LLM / Embedding)和图片存储(S3)配置都在应用内的**「设置」**里填(菜单 → 设置,或 `Cmd/Ctrl+,`;首次未配置大模型时会自动弹出)。配置保存在本机,保存后应用会自动重启以生效。
+
 ## CLI
 
 ```bash
@@ -64,7 +66,7 @@ MCP server 提供工具:`save_conversation`、`write_note`、`read_note`、`list
 ### 本地 stdio(单机使用)
 
 ```bash
-claude mcp add personal-wiki -- node /Users/yangning/Desktop/personal-wiki/bin/wiki.js mcp
+claude mcp add wikinest -- node /path/to/wikinest/bin/wiki.js mcp
 ```
 
 或在 Claude Desktop 的 `claude_desktop_config.json` 里:
@@ -72,9 +74,9 @@ claude mcp add personal-wiki -- node /Users/yangning/Desktop/personal-wiki/bin/w
 ```json
 {
   "mcpServers": {
-    "personal-wiki": {
+    "wikinest": {
       "command": "node",
-      "args": ["/Users/yangning/Desktop/personal-wiki/bin/wiki.js", "mcp"]
+      "args": ["/path/to/wikinest/bin/wiki.js", "mcp"]
     }
   }
 }
@@ -87,7 +89,7 @@ claude mcp add personal-wiki -- node /Users/yangning/Desktop/personal-wiki/bin/w
 ```json
 {
   "mcpServers": {
-    "personal-wiki": {
+    "wikinest": {
       "url": "https://your-domain.com/mcp",
       "headers": { "Authorization": "Bearer 你的-WIKI_TOKEN" }
     }
@@ -126,7 +128,7 @@ your-domain.com {
 
 `deploy/` 提供两种守护进程配置,任选其一:
 
-- **systemd**:`deploy/personal-wiki.service`(文件头有安装步骤)。
+- **systemd**:`deploy/wikinest.service`(文件头有安装步骤)。
 - **PM2**:`pm2 start deploy/ecosystem.config.cjs && pm2 save`。
 
 两者都靠 `bin/wiki.js` 自动加载项目根 `.env`,无需重复配环境变量。
@@ -193,7 +195,7 @@ LLM_MODEL=deepseek-chat                     # 或 gpt-4o-mini / qwen-plus ...
 - **MCP**:`ask_wiki` 工具(Cursor / Claude 里可直接问你的 wiki)。
 - **REST**:`POST /api/ask {question}`;语义搜索 `GET /api/search/semantic?q=`;重建索引 `POST /api/reindex`;是否可用 `GET /api/rag/status`。
 
-**配置**:embedding 默认复用上面的 `LLM_BASE_URL` / `LLM_API_KEY`(通义 DashScope 开箱即用,模型默认 `text-embedding-v3`)。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),单独指定 `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` 即可(见 `.env.example`)。
+**配置**:embedding 默认复用上面的 `LLM_BASE_URL` / `LLM_API_KEY`(通义 DashScope 开箱即用,模型默认 `text-embedding-v4`)。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),单独指定 `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` 即可(见 `.env.example`)。
 
 **索引**:向量索引以 JSON 存在 `content/.index/`(隐藏目录,不算作笔记)。首次提问时自动构建,之后只对**新增/改动**的笔记增量重嵌入;删除的笔记自动清理。换 embedding 模型会自动全量重建。
 

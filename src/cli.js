@@ -4,7 +4,7 @@ import {
 import { autoTagIfEmpty } from './core/classify.js';
 import { tidyAndSet, synthesizeCategory } from './core/organize.js';
 
-const HELP = `personal-wiki CLI
+const HELP = `Wikinest CLI
 
 Usage:
   wiki serve [--port N]        Start the web server (view + edit)

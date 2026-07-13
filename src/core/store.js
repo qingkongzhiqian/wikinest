@@ -259,20 +259,88 @@ export async function deleteCategory(name) {
   return changed;
 }
 
-/** Case-insensitive full-text search over title, path and body. */
-export async function searchNotes(query) {
-  const q = query.toLowerCase();
-  const notes = await getAllNotes();
-  const hits = [];
-  for (const { path: p, data, content } of notes) {
-    const title = (data.title || p).toString();
-    const haystack = (title + '\n' + content).toLowerCase();
-    const idx = haystack.indexOf(q);
-    if (idx !== -1) {
-      const start = Math.max(0, idx - 40);
-      const snippet = haystack.slice(start, idx + q.length + 40).replace(/\s+/g, ' ').trim();
-      hits.push({ path: p, title, snippet });
-    }
+// Parse a query into lowercase terms. Supports "quoted phrases" (kept whole)
+// and space-separated words; duplicates are collapsed. All terms must match
+// (AND), which gives multi-keyword search without any special syntax.
+function parseSearchTerms(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) return [];
+  const terms = [];
+  const re = /"([^"]+)"|(\S+)/g;
+  let m;
+  while ((m = re.exec(q)) !== null) {
+    const t = (m[1] || m[2] || '').trim();
+    if (t) terms.push(t);
   }
+  return [...new Set(terms)];
+}
+
+// Count non-overlapping occurrences of `needle` in `hay`.
+function countOccurrences(hay, needle) {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const idx = hay.indexOf(needle, from);
+    if (idx === -1) break;
+    count++;
+    from = idx + needle.length;
+  }
+  return count;
+}
+
+// Search index cache: reuse the lowercased haystack per note across searches,
+// rebuilding an entry only when the note's mtime changes. This keeps repeated
+// searches from re-lowercasing every note body on each keystroke.
+const _searchCache = new Map(); // path -> { mtimeMs, title, titleLow, hay }
+
+/**
+ * Case-insensitive full-text search over title and body.
+ * - Multi-keyword: whitespace-separated terms are ANDed (all must appear).
+ * - Phrases: wrap in "double quotes" to match a term containing spaces.
+ * - Ranked: title hits and more frequent matches score higher.
+ * @returns {Promise<Array<{ path, title, snippet, score }>>}
+ */
+export async function searchNotes(query) {
+  const terms = parseSearchTerms(query);
+  if (!terms.length) return [];
+
+  const notes = await getAllNotes();
+  const alive = new Set(notes.map((n) => n.path));
+  for (const k of _searchCache.keys()) if (!alive.has(k)) _searchCache.delete(k);
+
+  const hits = [];
+  for (const { path: p, data, content, mtimeMs } of notes) {
+    let e = _searchCache.get(p);
+    if (!e || e.mtimeMs !== mtimeMs) {
+      const title = (data.title || p).toString();
+      e = {
+        mtimeMs,
+        title,
+        titleLow: title.toLowerCase(),
+        hay: (title + '\n' + content).toLowerCase(),
+      };
+      _searchCache.set(p, e);
+    }
+
+    // Every term must be present (AND). Score = total occurrences, with a
+    // boost for terms found in the title. Track the earliest hit for the snippet.
+    let matchesAll = true;
+    let score = 0;
+    let firstIdx = Infinity;
+    for (const t of terms) {
+      const idx = e.hay.indexOf(t);
+      if (idx === -1) { matchesAll = false; break; }
+      if (idx < firstIdx) firstIdx = idx;
+      score += countOccurrences(e.hay, t);
+      if (e.titleLow.includes(t)) score += 10;
+    }
+    if (!matchesAll) continue;
+
+    const start = Math.max(0, firstIdx - 40);
+    const snippet = e.hay.slice(start, firstIdx + 80).replace(/\s+/g, ' ').trim();
+    hits.push({ path: p, title: e.title, snippet, score });
+  }
+
+  hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
   return hits;
 }

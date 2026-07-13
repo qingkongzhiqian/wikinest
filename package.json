@@ -1,16 +1,42 @@
 {
-  "name": "personal-wiki-desktop",
+  "name": "wikinest",
   "version": "1.0.0",
-  "description": "Local-first desktop app for the personal-wiki markdown knowledge base",
+  "description": "Wikinest — a local-first desktop app for your markdown personal wiki, with AI auto-organizing, MCP and RAG",
   "type": "module",
+  "main": "desktop/main.js",
+  "license": "MIT",
+  "author": "WiseFuturus <wisefuturus@163.com>",
+  "homepage": "https://github.com/WiseFuturus/wikinest#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WiseFuturus/wikinest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WiseFuturus/wikinest/issues"
+  },
+  "keywords": [
+    "wiki",
+    "knowledge-base",
+    "markdown",
+    "local-first",
+    "electron",
+    "mcp",
+    "rag",
+    "notes"
+  ],
   "bin": {
     "wiki": "bin/wiki.js"
   },
   "scripts": {
     "serve": "node bin/wiki.js serve",
     "mcp": "node bin/wiki.js mcp",
-    "test": "node --test test/",
-    "desktop": "electron desktop/main.js"
+    "test": "node --test 'test/**/*.test.js'",
+    "desktop": "electron desktop/main.js",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
   },
   "engines": {
     "node": ">=18"
@@ -23,9 +49,53 @@
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.9.0",
     "markdown-it": "^14.1.0",
+    "mermaid": "^11.16.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "electron": "^41.7.1"
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "app.wikinest",
+    "productName": "Wikinest",
+    "copyright": "Copyright © 2026 WiseFuturus",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/**/*",
+      "src/**/*",
+      "bin/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "target": ["AppImage", "deb"]
+    }
   }
 }

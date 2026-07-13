@@ -23,7 +23,7 @@ const COOKIE_NAME = 'wiki_session';
 function sessionSecret() {
   // Derive from the password by default so changing the password invalidates
   // all existing sessions. Override with WIKI_SESSION_SECRET if desired.
-  return process.env.WIKI_SESSION_SECRET || getWebPassword() || getMcpToken() || 'personal-wiki';
+  return process.env.WIKI_SESSION_SECRET || getWebPassword() || getMcpToken() || 'wikinest';
 }
 
 function sessionTtlMs() {

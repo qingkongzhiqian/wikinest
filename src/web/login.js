@@ -8,7 +8,7 @@ export const LOGIN_HTML = /* html */ `<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>登录 · Personal Wiki</title>
+<title>登录 · Wikinest</title>
 <style>
   :root {
     --bg: #ffffff;
@@ -150,7 +150,7 @@ export const LOGIN_HTML = /* html */ `<!DOCTYPE html>
           <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5z"/>
         </svg>
       </div>
-      <h1>Personal Wiki</h1>
+      <h1>Wikinest</h1>
       <p>登录以继续</p>
     </div>
     <form id="loginForm" autocomplete="on">

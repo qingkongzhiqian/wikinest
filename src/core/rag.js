@@ -27,7 +27,8 @@ export function isRagConfigured() {
 }
 
 // Split a note body into reasonably-sized chunks on paragraph boundaries.
-function chunkText(content) {
+// Exported for unit testing.
+export function chunkText(content) {
   const paras = (content || '').split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
   const chunks = [];
   let buf = '';
@@ -119,8 +120,9 @@ export async function syncIndex() {
       }
     }
 
-    if (pending.length || idx.model !== model) await saveIndex();
-    else await saveIndex(); // also persist pruning of deleted notes
+    // Always persist: re-embedded chunks, a model change, or just the pruning
+    // of deleted notes above all need to be written back to disk.
+    await saveIndex();
 
     let chunkCount = 0;
     for (const p of Object.keys(idx.notes)) chunkCount += (idx.notes[p].chunks || []).length;
