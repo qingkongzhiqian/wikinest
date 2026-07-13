@@ -1,75 +1,89 @@
-# Wikinest
+<h1 align="center">Wikinest</h1>
 
-**Wikinest** 是一个本地优先(local-first)的 Markdown 个人知识库:文件按目录存 markdown,web 端查看/在线编辑,MCP 和 CLI 都能往里写文件,AI 负责自动整理、分类与调用。核心场景是每次和 AI 聊完,通过 MCP 把对话存进来。
+<p align="center">
+  <b>Just dump your notes in — it formats and files them for you. However many you have, they stay tidy and findable.</b><br/>
+  <b>笔记随手丢进来,排版和分类自动完成。再多,也依然理得清、找得到。</b>
+</p>
 
-## 结构
+<p align="center">
+  <a href="#english">English</a> · <a href="#中文">中文</a>
+</p>
 
-```
-content/            # 你的笔记(md + 可选 frontmatter),支持任意子目录
-src/
-  core/store.js     # 核心:目录树 / 读写 / 搜索 / 路径安全
-  core/storage.js   # 图片上传:S3 兼容对象存储
-  render.js         # markdown → HTML
-  web/              # Express web 服务(查看 + 在线编辑 + 图片上传)
-  mcp/server.js     # MCP server
-  cli.js            # 命令行
-bin/wiki.js         # wiki 命令入口(启动时加载 .env)
-```
+<p align="center">
+  Local-first · Plain Markdown · AI auto-formatting & auto-categorizing · Fully customizable<br/>
+  本地优先 · 纯 Markdown · AI 自动排版与分类 · 完全可自定义
+</p>
 
-笔记默认存在 `content/`,可用环境变量 `WIKI_CONTENT_DIR` 改到别处。
+---
 
-## 安装
+## English
 
-```bash
-npm install
-npm link          # 可选:让 `wiki` 命令全局可用
-```
+### The problem it actually solves
 
-## Web 服务
+Taking notes is easy. **Keeping** them is not.
 
-```bash
-wiki serve                # 默认 http://localhost:4321
-wiki serve --port 8080
-```
+At first, a handful of Markdown files feels tidy. Then it grows. Formatting drifts — some notes are neat, others are a wall of pasted text. Nothing is categorized, or you spent an evening building a folder tree that no longer fits what you're actually saving. Six months in you have hundreds of notes, no idea what's in half of them, and search returns either everything or nothing. The archive you built to *remember* things has become the thing you *avoid*.
 
-左侧目录树 + 搜索,中间渲染视图,点「编辑」可在线改并保存(Cmd/Ctrl+S),「新建」支持子目录路径。
+The real cost was never writing the notes — it was **maintaining** them. Formatting, categorizing, re-organizing, pruning: chores that pile up until you quietly give up, and your notes rot into a graveyard.
 
-## 桌面 App(本地优先)
+**Wikinest takes that maintenance off your hands.** Paste in raw, messy text — a half-formatted snippet, rough thoughts, a dumped conversation — and it:
 
-把 wiki 作为桌面应用运行,笔记全部保存在你选择的本地文件夹(Vault):
+- **tidies the formatting** into clean Markdown (fixes headings, lists, code blocks, punctuation) *without changing what you actually wrote*, and
+- **files it under the right categories automatically**, reusing your existing ones instead of inventing new folders every time.
+
+No folder tree to design. No tags to remember. You just throw things in. And whenever the automatic choice isn't what you want — the category, the title, the wording — **all of it is yours to override.**
+
+### How it works: dump → organize → recall
+
+- **Dump — with zero friction.** Paste into the editor, pipe from the command line, or let an AI chat write straight in via [MCP](https://modelcontextprotocol.io). No formatting or filing required up front.
+- **Organize — automatically, but never rigidly.** AI cleans up the formatting and auto-classifies each note (categories live in the file's frontmatter, not in folders). Reuse, rename, or merge categories, re-run classification, or just edit by hand — it's all customizable. It can even synthesize the scattered notes in one category into a single coherent article.
+- **Recall — even when there's a lot.** Full-text search for when you remember the words; semantic search + "ask your wiki" (RAG) for when you don't. Answers come with citations that jump straight back to the source note, so a big pile stays as searchable as a small one.
+
+> No API key? Wikinest is still a fast, local, plain-Markdown wiki. The auto-formatting and auto-categorizing simply switch on the moment you add one.
+
+### Your data, your rules
+
+- **Local-first:** notes are just `.md` files (with optional YAML frontmatter) in a folder you control — open, edit, back up, or git them with any tool.
+- **No lock-in:** categories, sources and metadata live inside the files themselves.
+- **Everything is customizable:** auto-format and auto-classify are the default, not a cage. Rename/merge/remove categories, fix a title, or rewrite a note — the AI just gives you a good starting point.
+
+### Quick start — Desktop app
+
+The simplest way to use it. Your notes stay in a local folder you pick (your "Vault"), exactly like Obsidian.
 
 ```bash
 npm install
 npm run desktop
 ```
 
-首次启动会让你选择一个文件夹作为 Vault,之后自动记住。数据即该文件夹里的 `.md` 文件,可随时用其它工具打开或备份。
+On first launch you pick a folder as your Vault; it's remembered afterwards. Open or switch Vaults anytime from **File → Open Folder…** / **Open Recent**. AI and image-upload settings live in the in-app **Settings** (menu, or `Cmd/Ctrl+,`).
 
-桌面版不用 `.env`:AI(LLM / Embedding)和图片存储(S3)配置都在应用内的**「设置」**里填(菜单 → 设置,或 `Cmd/Ctrl+,`;首次未配置大模型时会自动弹出)。配置保存在本机,保存后应用会自动重启以生效。
+### Quick start — Self-host (web + MCP server)
 
-## CLI
-
-```bash
-echo "# 今天" | wiki add journal/2026-07-06   # 从 stdin 写入
-wiki add chats/idea "# 灵感"                    # 直接给内容
-wiki append journal/2026-07-06 "补充一段"       # 追加
-wiki cat journal/2026-07-06                     # 打印原文
-wiki ls                                         # 列出所有笔记
-wiki search "关键词"                             # 全文搜索
-wiki rm chats/idea                              # 删除
-```
-
-## MCP(核心场景)
-
-MCP server 提供工具:`save_conversation`、`write_note`、`read_note`、`list_notes`、`search_notes`。支持两种连接方式:
-
-### 本地 stdio(单机使用)
+Run it on a server so any device (or a remote Cursor / Claude) can read and write to it, with automatic HTTPS via Caddy:
 
 ```bash
-claude mcp add wikinest -- node /path/to/wikinest/bin/wiki.js mcp
+cp .env.example .env      # set WIKI_DOMAIN / WIKI_TOKEN / WIKI_PASSWORD / LLM_* / S3_*
+docker compose up -d --build
 ```
 
-或在 Claude Desktop 的 `claude_desktop_config.json` 里:
+Notes persist on the host at `./content`. Prefer bare metal? See `deploy/wikinest.service` (systemd) or `deploy/ecosystem.config.cjs` (PM2).
+
+### Turn on auto-formatting & auto-categorizing
+
+Any OpenAI-compatible endpoint works (OpenAI / DeepSeek / Qwen / self-hosted) — switch providers by changing env vars, never code:
+
+```bash
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=deepseek-chat
+```
+
+Embeddings (for semantic search / ask) reuse the same config by default; override with `EMBED_*` if your provider has no embeddings endpoint. See `.env.example` for the full, commented list, including S3-compatible image storage.
+
+### Capture from AI chats too (MCP)
+
+Beyond pasting and the CLI, you can let Cursor / Claude write into your wiki directly — just say *"save this to my wiki"* at the end of a chat.
 
 ```json
 {
@@ -82,9 +96,117 @@ claude mcp add wikinest -- node /path/to/wikinest/bin/wiki.js mcp
 }
 ```
 
-### 远程 HTTP(部署到服务器,多设备/Cursor 远程写入)
+Self-hosted? Point it at your server instead:
 
-`wiki serve` 会在同一端口的 `POST /mcp` 上提供 Streamable HTTP 传输(无状态)。在 Cursor 的 `~/.cursor/mcp.json`(或 Claude Desktop)里填 URL + token:
+```json
+{
+  "mcpServers": {
+    "wikinest": {
+      "url": "https://your-domain.com/mcp",
+      "headers": { "Authorization": "Bearer YOUR_WIKI_TOKEN" }
+    }
+  }
+}
+```
+
+Tools: `save_conversation`, `write_note`, `read_note`, `list_notes`, `search_notes`, `tidy_note`, `synthesize_category`, `ask_wiki`.
+
+### CLI
+
+```bash
+echo "# Today" | wiki add journal/2026-07-06   # from stdin
+wiki search "keyword"                            # full-text search
+wiki tidy journal/2026-07-06                     # AI-clean the formatting
+wiki digest "Machine Learning"                   # synthesize a whole category
+```
+
+### Exposing it publicly?
+
+The server is **open by default**. Before putting it on the internet, set `WIKI_TOKEN` (MCP Bearer) and `WIKI_PASSWORD` (web login) — startup logs warn loudly if either is missing. All paths are sandboxed to your content directory (`../` escapes are rejected), and rendered Markdown strips raw HTML so note content can't smuggle in scripts.
+
+---
+
+## 中文
+
+### 它真正解决的问题
+
+记笔记很容易,**维护**笔记才难。
+
+一开始几篇 Markdown,看着挺整齐。然后越攒越多。排版开始参差不齐——有的干净,有的就是一坨粘贴进来的文本。要么根本没分类,要么你花一晚上搭的文件夹树早就装不下你真正在存的东西。半年后,几百篇笔记,一半你都想不起里面写了啥;一搜,不是全部命中就是啥也搜不到。这个你为了「记住」而建的库,变成了你「不想打开」的地方。
+
+真正的成本从来不是写笔记,而是**维护**它们:排版、归类、重新整理、清理……这些杂活越堆越高,直到你悄悄放弃,笔记烂成一片墓地。
+
+**Wikinest 把这些维护活儿从你手里接走。** 把原始的、乱的文本随手丢进来——半成品片段、粗糙的想法、一段导出的对话——它会:
+
+- **自动排版**成规范的 Markdown(修正标题层级、列表、代码块、标点),但**不改动你写的内容**;
+- **自动归类**到合适的分类下,并优先复用你已有的分类,而不是每次都新建一堆文件夹。
+
+不用设计文件夹树,不用记标签,你只管丢进去。而当自动的结果不合你意——分类也好、标题也好、措辞也好——**这一切都能由你自己改。**
+
+### 它怎么运转:随手丢 → 自动整理 → 随时调用
+
+- **随手丢——零摩擦。** 编辑器里粘贴、命令行管道、或让 AI 对话通过 [MCP](https://modelcontextprotocol.io) 直接写入。丢之前不用先排版、先归档。
+- **自动整理——自动但不死板。** AI 帮你排版并自动分类(分类存在文件的 frontmatter 里,而不是靠文件夹)。分类可复用、可重命名、可合并,可以重跑归类,也可以纯手动改——全都能自定义。它甚至能把某个分类下零散的笔记聚合成一篇连贯的综述。
+- **随时调用——笔记再多也不怕。** 记得关键词就全文搜索;记不清就用语义检索 + 「问知识库」(RAG)。回答都带出处角标,一点就跳回原文——库大到几百篇,也和几篇时一样好找。
+
+> 没有 API key?Wikinest 依然是一个快速、本地、纯 Markdown 的知识库。填上 key,自动排版和自动分类立刻点亮。
+
+### 你的数据,你说了算
+
+- **本地优先:** 笔记就是文件夹里的 `.md` 文件(可带 YAML frontmatter),用任何工具都能打开、编辑、备份、纳入 git。
+- **不绑定平台:** 分类、来源、元数据都存在文件本身里。
+- **一切可自定义:** 自动排版和自动分类是默认,不是牢笼。重命名/合并/删除分类、改标题、重写正文——AI 只是给你一个好的起点。
+
+### 快速开始 —— 桌面 App
+
+最省心的用法。笔记保存在你自己选的本地文件夹(Vault)里,和 Obsidian 一样。
+
+```bash
+npm install
+npm run desktop
+```
+
+首次启动选一个文件夹作为 Vault,之后自动记住。随时可在 **文件 → 打开文件夹… / 打开最近** 切换 Vault。AI 与图片上传配置都在应用内的 **设置**(菜单,或 `Cmd/Ctrl+,`)里填。
+
+### 快速开始 —— 自托管(Web + MCP 服务)
+
+部署到服务器,让任意设备(或远程的 Cursor / Claude)都能读写,并由 Caddy 自动签发 HTTPS:
+
+```bash
+cp .env.example .env      # 填 WIKI_DOMAIN / WIKI_TOKEN / WIKI_PASSWORD / LLM_* / S3_*
+docker compose up -d --build
+```
+
+笔记持久化在宿主机 `./content`。想直接跑在物理机上?见 `deploy/wikinest.service`(systemd)或 `deploy/ecosystem.config.cjs`(PM2)。
+
+### 开启自动排版与自动分类
+
+任何 OpenAI 兼容接口都行(OpenAI / DeepSeek / 通义 / 自建)——换服务商只改环境变量,不动代码:
+
+```bash
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=deepseek-chat
+```
+
+向量检索(语义搜索 / 问答)默认复用上面的配置;若你的服务商没有 embeddings 接口,用 `EMBED_*` 单独指定。完整带注释的配置(含 S3 兼容图片存储)见 `.env.example`。
+
+### 也把 AI 对话收进来(MCP)
+
+除了粘贴和命令行,你还能让 Cursor / Claude 直接往你的 wiki 里写——对话结尾说一句「把这段存进我的 wiki」即可。
+
+```json
+{
+  "mcpServers": {
+    "wikinest": {
+      "command": "node",
+      "args": ["/path/to/wikinest/bin/wiki.js", "mcp"]
+    }
+  }
+}
+```
+
+自托管的话,改成指向你的服务器:
 
 ```json
 {
@@ -97,124 +219,24 @@ claude mcp add wikinest -- node /path/to/wikinest/bin/wiki.js mcp
 }
 ```
 
-> ⚠️ 公网可写,**必须**设置 `WIKI_TOKEN`(见「部署与安全」)。未设置时 `/mcp` 对所有人开放写入。
+工具:`save_conversation`、`write_note`、`read_note`、`list_notes`、`search_notes`、`tidy_note`、`synthesize_category`、`ask_wiki`。
 
-之后对话里就能让 AI 「把这次对话保存到 wiki」,它会调用 `save_conversation`,自动写入带 `savedAt` / `title` / `tags` 的 markdown 文件。
-
-## 部署与安全
-
-服务默认**无认证**,直接暴露公网等于让任何人读写/删除你的笔记。部署前在 `.env` 里设置:
-
-- `WIKI_TOKEN`:MCP (`/mcp`) 的 Bearer token,远程客户端用它连接。用 `openssl rand -hex 32` 生成。
-- `WIKI_PASSWORD`(+ 可选 `WIKI_USER`,默认 `wiki`):Web UI / REST API 的 Basic Auth。
-
-启动时会打印各项认证是否开启;未开启会有 `⚠️` 警告。
-
-建议再前置一层反向代理提供 HTTPS(Caddy 最省事,自动签证书):
-
-```caddyfile
-your-domain.com {
-    reverse_proxy 127.0.0.1:4321
-}
-```
-
-并让 Node 只监听本机(配合 `WIKI_PORT`)、防火墙只放行 80/443。对象存储的 access key 建议用最小权限(仅指定桶/前缀的 `PutObject`)。
-
-### 限流
-
-`/mcp` 与 `/api/upload` 内置按 IP 的固定窗口限流(默认每分钟 120 / 30 次),超限返回 `429`。可用 `WIKI_MCP_RATE_LIMIT` / `WIKI_UPLOAD_RATE_LIMIT` 调整。有反向代理时设 `WIKI_TRUST_PROXY`(同机反代用默认 `loopback` 即可)让限流按真实客户端 IP 生效。
-
-### 常驻运行
-
-`deploy/` 提供两种守护进程配置,任选其一:
-
-- **systemd**:`deploy/wikinest.service`(文件头有安装步骤)。
-- **PM2**:`pm2 start deploy/ecosystem.config.cjs && pm2 save`。
-
-两者都靠 `bin/wiki.js` 自动加载项目根 `.env`,无需重复配环境变量。
-
-### Docker(推荐,含自动 HTTPS)
-
-`docker-compose.yml` 会同时起 wiki 和 Caddy(自动签发 HTTPS 证书):
+### 命令行
 
 ```bash
-cp .env.example .env    # 填 WIKI_DOMAIN / WIKI_TOKEN / WIKI_PASSWORD / S3_* / LLM_*
-docker compose up -d --build
+echo "# 今天" | wiki add journal/2026-07-06   # 从 stdin 写入
+wiki search "关键词"                             # 全文搜索
+wiki tidy journal/2026-07-06                     # AI 整理排版
+wiki digest "机器学习"                           # 把整个分类聚合成综述
 ```
 
-笔记持久化在宿主机 `./content`。本地测试把 `WIKI_DOMAIN` 设为 `localhost` 即可。
+### 要暴露到公网?
 
-## 自动分类
+服务**默认无认证**。放到公网前,先设置 `WIKI_TOKEN`(MCP Bearer)和 `WIKI_PASSWORD`(Web 登录)——缺任一项启动时都会大声警告。所有路径都被限制在你的内容目录内(`../` 越狱会被拒绝);渲染 Markdown 时禁用原始 HTML,防止笔记内容夹带脚本。
 
-不用手动建文件夹分类。分类存在每篇笔记 frontmatter 的 `categories`(多值),由模型自动生成:
+---
 
-- **保存时自动归类**:在网页里写完保存,若该文没有分类且已配置模型,会自动打上 1~3 个分类(优先复用已有分类,避免类别爆炸)。
-- **文章页管理分类**:点分类名可**重命名**(作用到所有文章),`✕` 从本文移除,`＋ 分类` 手动添加,`🤖 自动归类` 立即重跑。
-- **首页按分类聚合**:顶部标签即分类,一篇多分类会出现在多个标签下;没分类的归到「未分类」。
-- **批量归类**:`POST /api/classify/all`(默认只处理未分类的,传 `{"all":true}` 全部重跑)。
-
-配置(OpenAI 兼容,换服务商只改环境变量):
-
-```bash
-# .env
-LLM_BASE_URL=https://api.deepseek.com/v1   # 或 OpenAI / 通义 / 自建
-LLM_API_KEY=sk-...
-LLM_MODEL=deepseek-chat                     # 或 gpt-4o-mini / qwen-plus ...
-```
-
-文件仍存在各自目录里(目录只是物理存放,不再是分类维度);「新建」只需填标题,自动放进 `notes/`。
-
-## AI 整理(排版)
-
-丢进来的原始文本(粘贴 / MCP),让模型整理成排版规范的 markdown:分段、补标题层级、列表、代码块、修正错别字标点。**只整理格式,不增删或改写事实**。
-
-- **文章页**:点「🪄 整理」直接整理并保存(会覆盖当前正文,frontmatter 打上 `tidied: true`)。
-- **编辑器**:点「🪄 AI 整理」把整理结果填回编辑框,确认后再保存(非破坏性)。
-- **MCP**:`save_conversation` 传 `tidy: true` 即在保存前整理;`tidy_note` 工具整理已有笔记。
-- **CLI**:`wiki tidy <path>`。
-- **REST**:`POST /api/tidy {path}`(原地保存)、`POST /api/tidy/preview {content}`(只返回不保存)。
-
-## AI 聚合成文(分类综述)
-
-把同一分类下的所有零散笔记喂给模型,聚合、去重、按子主题重组,产出一篇连贯的综述文章。综述存到 `digests/<分类>.md`,标记 `digest: true`,**不参与分类计数、不出现在普通列表**。
-
-综述**可回链到原始笔记**:正文里引用某篇内容处会带 `[[编号]]` 角标,文末自动生成「参考来源」列表,链接由代码确定性生成(不靠模型编 URL),点击即在应用内打开对应原文。来源路径也存进 frontmatter 的 `sources`。
-
-- **网页**:进入某个分类标签,顶部出现「📚 AI 综述」卡片,点「✨ 生成综述」/「🔄 更新」;生成后点「查看综述」阅读。加了新笔记后再点更新即可保持最新。
-- **MCP**:`synthesize_category` 工具。
-- **CLI**:`wiki digest <分类>`。
-- **REST**:`POST /api/digest {category}`。
-
-整理和聚合都复用「自动分类」那套 LLM 配置(`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`),无需额外设置。长任务超时可用 `LLM_LONG_TIMEOUT_MS` 调整(默认 90s)。
-
-## 问知识库(语义检索 + RAG 问答)
-
-用大白话提问,系统对全部笔记做**向量语义检索**,把最相关的片段喂给模型,生成**带出处链接**的回答——即使你记不清原文用词也能翻出来。定位:记录→整理→**调用**的闭环。
-
-- **网页**:左栏「问一问」进入问答页,输入问题(Enter 提交),回答里引用处带 `[[编号]]` 角标,文末「参考来源」可点击跳回原文。
-- **MCP**:`ask_wiki` 工具(Cursor / Claude 里可直接问你的 wiki)。
-- **REST**:`POST /api/ask {question}`;语义搜索 `GET /api/search/semantic?q=`;重建索引 `POST /api/reindex`;是否可用 `GET /api/rag/status`。
-
-**配置**:embedding 默认复用上面的 `LLM_BASE_URL` / `LLM_API_KEY`(通义 DashScope 开箱即用,模型默认 `text-embedding-v4`)。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),单独指定 `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` 即可(见 `.env.example`)。
-
-**索引**:向量索引以 JSON 存在 `content/.index/`(隐藏目录,不算作笔记)。首次提问时自动构建,之后只对**新增/改动**的笔记增量重嵌入;删除的笔记自动清理。换 embedding 模型会自动全量重建。
-
-## 图片存储(对象存储)
-
-图片走 S3 兼容对象存储(AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用),markdown 里只保存图片 URL,仓库保持纯文本轻量。
-
-配置:复制 `.env.example` 为 `.env` 并填入你的桶信息(`.env` 已被忽略,不会提交):
-
-```bash
-cp .env.example .env
-# 编辑 .env,至少填 S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY
-# 建议再填 S3_PUBLIC_BASE_URL(图片对外访问域名)
-```
-
-换服务商只改环境变量、不改代码。常见配置见 `.env.example` 内注释。
-
-配好后 `wiki serve`,进入任意笔记点「编辑」,**粘贴**(Cmd/Ctrl+V)或**拖拽**图片进编辑框即可自动上传,并在光标处插入 `![](https://…)` 链接。未配置对象存储时上传会给出提示。
-
-## 安全
-
-所有路径都被限制在 `content/` 目录内,`../` 越狱会被拒绝。web 渲染禁用了原始 HTML,避免 AI 内容里夹带脚本。
+<p align="center">
+  <sub>MIT License · Your notes, tidied and organized — without the busywork.</sub><br/>
+  <sub>MIT 许可 · 你的笔记,自动排版归类,省下所有杂活。</sub>
+</p>
