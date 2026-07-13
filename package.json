@@ -6,13 +6,13 @@
   "main": "desktop/main.js",
   "license": "MIT",
   "author": "WiseFuturus <wisefuturus@163.com>",
-  "homepage": "https://github.com/WiseFuturus/wikinest#readme",
+  "homepage": "https://github.com/qingkongzhiqian/wikinest#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/WiseFuturus/wikinest.git"
+    "url": "https://github.com/qingkongzhiqian/wikinest.git"
   },
   "bugs": {
-    "url": "https://github.com/WiseFuturus/wikinest/issues"
+    "url": "https://github.com/qingkongzhiqian/wikinest/issues"
   },
   "keywords": [
     "wiki",
