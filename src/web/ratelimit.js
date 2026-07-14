@@ -33,7 +33,10 @@ export function rateLimit({ windowMs, max, key }) {
     if (e.count > max) {
       const retry = Math.ceil((e.resetAt - now) / 1000);
       res.set('Retry-After', String(retry));
-      return res.status(429).json({ error: '请求过于频繁,请稍后再试' });
+      return res.status(429).json({
+        code: 'RATE_LIMITED',
+        error: 'Too many requests. Please try again later.',
+      });
     }
     next();
   };

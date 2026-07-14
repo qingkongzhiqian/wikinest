@@ -1,6 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chunkText } from '../src/core/rag.js';
+import { chunkText, isRagConfigured, isAskConfigured } from '../src/core/rag.js';
+
+test('ask configuration requires both embeddings and a chat model', () => {
+  const keys = ['EMBED_BASE_URL', 'EMBED_API_KEY', 'EMBED_MODEL', 'LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.EMBED_BASE_URL = 'https://embeddings.example.test/v1';
+    process.env.EMBED_API_KEY = 'embed-key';
+    process.env.EMBED_MODEL = 'embed-model';
+    delete process.env.LLM_BASE_URL;
+    delete process.env.LLM_API_KEY;
+    delete process.env.LLM_MODEL;
+    assert.equal(isRagConfigured(), true);
+    assert.equal(isAskConfigured(), false);
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
 
 test('chunkText returns nothing for empty / whitespace input', () => {
   assert.deepEqual(chunkText(''), []);

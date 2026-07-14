@@ -15,7 +15,7 @@
   @media (prefers-color-scheme: dark) {
     body { color: #e6e6e6; background: #1e1e1e; }
     fieldset { background: #2a2a2a; border-color: #3a3a3a; }
-    input { background: #1e1e1e; color: #e6e6e6; border-color: #444; }
+    input, select { background: #1e1e1e; color: #e6e6e6; border-color: #444; }
     .hint { color: #999; }
     footer { background: rgba(30,30,30,.92); border-color: #3a3a3a; }
   }
@@ -28,11 +28,11 @@
   legend { font-weight: 600; padding: 0 6px; }
   .row { margin-bottom: 12px; }
   label { display: block; font-weight: 500; margin-bottom: 4px; }
-  input {
+  input, select {
     width: 100%; padding: 8px 10px; border: 1px solid #d0d0d5;
     border-radius: 7px; font: inherit;
   }
-  input:focus { outline: 2px solid #0a84ff; outline-offset: 0; border-color: #0a84ff; }
+  input:focus, select:focus { outline: 2px solid #0a84ff; outline-offset: 0; border-color: #0a84ff; }
   .hint { font-size: 12px; color: #86868b; margin-top: 4px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   footer {
@@ -55,21 +55,32 @@
 </style>
 </head>
 <body>
-  <h1>设置</h1>
-  <p class="lead">这些配置保存在本机,用于启用 AI 分类 / 整理 / 综述 / 问知识库,以及图片上传。留空即不启用对应功能。</p>
+  <h1 data-i18n="app.settings">设置</h1>
+  <p class="lead" data-i18n="settings.lead">这些配置保存在本机,用于启用 AI 分类 / 整理 / 综述 / 问知识库,以及图片上传。留空即不启用对应功能。</p>
 
   <fieldset>
-    <legend>知识库(Vault)</legend>
-    <p class="hint" style="margin-top:0">当前打开的文件夹。更换后应用会重启并读取新文件夹里的笔记。</p>
-    <div class="row" style="display:flex; align-items:center; gap:12px;">
-      <code id="vaultPath" style="flex:1; overflow-wrap:anywhere;">—</code>
-      <button class="ghost" id="chooseVault" style="white-space:nowrap;">更换…</button>
+    <legend data-i18n="settings.interface">界面</legend>
+    <div class="row">
+      <label for="UI_LOCALE" data-i18n="settings.interfaceLanguage">界面语言</label>
+      <select id="UI_LOCALE">
+        <option value="en">English</option>
+        <option value="zh-CN">简体中文</option>
+      </select>
     </div>
   </fieldset>
 
   <fieldset>
-    <legend>大模型(LLM)</legend>
-    <p class="hint" style="margin-top:0">OpenAI 兼容接口即可:OpenAI / DeepSeek / 通义千问 / 自建。填了才会启用自动分类、整理、综述、问答。</p>
+    <legend data-i18n="settings.vault">知识库(Vault)</legend>
+    <p class="hint" style="margin-top:0" data-i18n="settings.vaultNote">当前打开的文件夹。更换后应用会重启并读取新文件夹里的笔记。</p>
+    <div class="row" style="display:flex; align-items:center; gap:12px;">
+      <code id="vaultPath" style="flex:1; overflow-wrap:anywhere;">—</code>
+      <button class="ghost" id="chooseVault" style="white-space:nowrap;" data-i18n="settings.change">更换…</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend data-i18n="settings.llm">大模型(LLM)</legend>
+    <p class="hint" style="margin-top:0" data-i18n="settings.llmNote">OpenAI 兼容接口即可:OpenAI / DeepSeek / 通义千问 / 自建。填了才会启用自动分类、整理、综述、问答。</p>
     <div class="row">
       <label for="LLM_BASE_URL">Base URL</label>
       <input id="LLM_BASE_URL" placeholder="https://api.deepseek.com/v1" />
@@ -79,14 +90,14 @@
       <input id="LLM_API_KEY" type="password" placeholder="sk-..." />
     </div>
     <div class="row">
-      <label for="LLM_MODEL">模型</label>
+      <label for="LLM_MODEL" data-i18n="settings.model">模型</label>
       <input id="LLM_MODEL" placeholder="deepseek-chat / gpt-4o-mini / qwen-plus" />
     </div>
   </fieldset>
 
   <fieldset>
-    <legend>向量检索(Embedding,可选)</legend>
-    <p class="hint" style="margin-top:0">留空则复用上面的 LLM 配置。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),在此单独指定。默认模型 <code>text-embedding-v4</code>。</p>
+    <legend data-i18n="settings.embedding">向量检索(Embedding,可选)</legend>
+    <p class="hint" style="margin-top:0" data-i18n="settings.embeddingNote">留空则复用上面的 LLM 配置。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),在此单独指定。</p>
     <div class="row">
       <label for="EMBED_BASE_URL">Embed Base URL</label>
       <input id="EMBED_BASE_URL" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
@@ -97,22 +108,22 @@
         <input id="EMBED_API_KEY" type="password" placeholder="sk-..." />
       </div>
       <div class="row">
-        <label for="EMBED_MODEL">Embed 模型</label>
+        <label for="EMBED_MODEL" data-i18n="settings.embedModel">Embed 模型</label>
         <input id="EMBED_MODEL" placeholder="text-embedding-v4" />
       </div>
     </div>
   </fieldset>
 
   <fieldset>
-    <legend>图片存储(S3 兼容,可选)</legend>
-    <p class="hint" style="margin-top:0">AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用。填了才能在编辑器里粘贴 / 拖拽上传图片。</p>
+    <legend data-i18n="settings.storage">图片存储(S3 兼容,可选)</legend>
+    <p class="hint" style="margin-top:0" data-i18n="settings.storageNote">AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用。填了才能在编辑器里粘贴 / 拖拽上传图片。</p>
     <div class="grid2">
       <div class="row">
         <label for="S3_BUCKET">Bucket</label>
         <input id="S3_BUCKET" placeholder="my-wiki-images" />
       </div>
       <div class="row">
-        <label for="S3_PUBLIC_BASE_URL">公开访问 URL 前缀</label>
+        <label for="S3_PUBLIC_BASE_URL" data-i18n="settings.publicUrl">公开访问 URL 前缀</label>
         <input id="S3_PUBLIC_BASE_URL" placeholder="https://images.example.com" />
       </div>
     </div>
@@ -128,7 +139,7 @@
     </div>
     <div class="grid2">
       <div class="row">
-        <label for="S3_ENDPOINT">Endpoint(R2/OSS/MinIO 需要)</label>
+        <label for="S3_ENDPOINT" data-i18n="settings.endpoint">Endpoint(R2/OSS/MinIO 需要)</label>
         <input id="S3_ENDPOINT" placeholder="https://<account>.r2.cloudflarestorage.com" />
       </div>
       <div class="row">
@@ -138,12 +149,12 @@
     </div>
     <div class="grid2">
       <div class="row">
-        <label for="S3_KEY_PREFIX">Key 前缀</label>
+        <label for="S3_KEY_PREFIX" data-i18n="settings.keyPrefix">Key 前缀</label>
         <input id="S3_KEY_PREFIX" placeholder="wiki-images/" />
       </div>
       <div class="row">
-        <label for="S3_FORCE_PATH_STYLE">Path-style(MinIO 填 true)</label>
-        <input id="S3_FORCE_PATH_STYLE" placeholder="true / 留空" />
+        <label for="S3_FORCE_PATH_STYLE" data-i18n="settings.pathStyle">Path-style(MinIO 填 true)</label>
+        <input id="S3_FORCE_PATH_STYLE" placeholder="true / 留空" data-i18n-placeholder="settings.trueOrBlank" />
       </div>
     </div>
   </fieldset>
@@ -151,8 +162,8 @@
   <footer>
     <span id="status"></span>
     <span class="spacer"></span>
-    <button class="ghost" id="cancel">取消</button>
-    <button class="primary" id="save">保存并重启</button>
+    <button class="ghost" id="cancel" data-i18n="app.cancel">取消</button>
+    <button class="primary" id="save" data-i18n="app.save">保存</button>
   </footer>
 
 <script>
@@ -162,6 +173,24 @@
     'S3_BUCKET','S3_ACCESS_KEY_ID','S3_SECRET_ACCESS_KEY','S3_PUBLIC_BASE_URL',
     'S3_ENDPOINT','S3_REGION','S3_KEY_PREFIX','S3_FORCE_PATH_STYLE',
   ];
+  let uiMessages = {};
+
+  function tr(key, params = {}) {
+    const template = uiMessages[key] || key;
+    return template.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? `{${name}}`));
+  }
+
+  function applyMessages(messages, locale) {
+    uiMessages = messages || {};
+    document.documentElement.lang = locale || 'en';
+    document.title = tr('app.settings') + ' · Wikinest';
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      el.textContent = tr(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+      el.placeholder = tr(el.dataset.i18nPlaceholder);
+    });
+  }
 
   async function load() {
     const data = await window.wikiSettings.get();
@@ -171,25 +200,30 @@
     }
     try {
       const info = await window.wikiSettings.info();
+      const messages = info?.messages || {};
+      applyMessages(messages, info?.locale);
       if (info?.vaultDir) {
         document.getElementById('vaultPath').textContent = info.vaultDir;
       }
+      document.getElementById('UI_LOCALE').value = info?.locale || 'en';
     } catch { /* ignore */ }
   }
 
   function collect() {
     const out = {};
     for (const k of KEYS) out[k] = (document.getElementById(k)?.value || '').trim();
+    out.locale = document.getElementById('UI_LOCALE').value;
     return out;
   }
 
   document.getElementById('save').addEventListener('click', async () => {
-    document.getElementById('status').textContent = '保存中,应用即将重启…';
-    await window.wikiSettings.save(collect());
+    document.getElementById('status').textContent = tr('settings.saving');
+    const result = await window.wikiSettings.save(collect());
+    if (result?.localeChanged) location.reload();
   });
   document.getElementById('cancel').addEventListener('click', () => window.wikiSettings.close());
   document.getElementById('chooseVault').addEventListener('click', () => {
-    document.getElementById('status').textContent = '若选择了新文件夹,应用将重启…';
+    document.getElementById('status').textContent = tr('settings.vaultRestart');
     window.wikiSettings.chooseVault();
   });
 

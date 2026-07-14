@@ -3,6 +3,7 @@
 
 import { readNote, listCategories, setNoteCategories, normalizeCategoryList } from './store.js';
 import { chat, extractJson, isLLMConfigured } from './llm.js';
+import { SINGLE_SOURCE_LANGUAGE_RULE } from './prompts.js';
 
 const MAX_CONTENT_CHARS = 4000;
 const MAX_CATEGORIES = 3;
@@ -38,15 +39,16 @@ export async function classifyNote({ title = '', content = '', existingCategorie
     throw new Error('自动分类未配置:请设置 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL');
   }
   const body = (content || '').slice(0, MAX_CONTENT_CHARS);
-  const existing = existingCategories.length ? existingCategories.join('、') : '(暂无)';
+  const existing = existingCategories.length ? existingCategories.join(', ') : '(none)';
 
   const system =
-    '你是一个中文文章分类助手。请根据文章内容,给出 1 到 3 个分类。' +
-    '优先复用「已有分类」里语义相符的项,只有确实没有合适的才创建新分类。' +
-    '分类要宽泛、可长期复用(如「技术」「生活」「读书笔记」「随笔」),避免过于具体或每篇都造新词。' +
-    '只返回 JSON,格式:{"categories":["分类1","分类2"]},不要输出多余文字。';
+    'You classify personal notes into 1 to 3 categories. ' +
+    'Prefer semantically matching items from the existing categories and create a new category only when none fits. ' +
+    'Use broad, reusable categories instead of note-specific labels. ' +
+    SINGLE_SOURCE_LANGUAGE_RULE + ' ' +
+    'Return only JSON in this shape: {"categories":["category 1","category 2"]}.';
   const user =
-    `已有分类:${existing}\n\n标题:${title || '(无)'}\n\n正文:\n${body}`;
+    `Existing categories: ${existing}\n\nTitle: ${title || '(none)'}\n\nContent:\n${body}`;
 
   const text = await chat(
     [

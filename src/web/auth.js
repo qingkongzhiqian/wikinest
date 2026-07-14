@@ -106,7 +106,7 @@ export function mcpBearer(req, res, next) {
   const h = req.get('authorization') || '';
   const bearer = h.startsWith('Bearer ') ? h.slice(7) : '';
   if (safeEqual(bearer, token)) return next();
-  res.status(401).json({ error: 'unauthorized' });
+  res.status(401).json({ code: 'UNAUTHORIZED', error: 'unauthorized' });
 }
 
 // HTTP Basic auth header check - kept for curl/API/script compatibility.
@@ -134,7 +134,7 @@ export function webGuard(req, res, next) {
   const wantsJson = req.path.startsWith('/api/')
     || req.xhr
     || (req.get('accept') || '').includes('application/json');
-  if (wantsJson) return res.status(401).json({ error: 'unauthorized' });
+  if (wantsJson) return res.status(401).json({ code: 'UNAUTHORIZED', error: 'unauthorized' });
 
   const dest = encodeURIComponent(req.originalUrl || '/');
   return res.redirect(302, '/login?next=' + dest);

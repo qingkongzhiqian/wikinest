@@ -18,6 +18,6 @@ contextBridge.exposeInMainWorld('wikiSettings', {
   // Fired after settings are hot-applied so the page can refresh its UI state.
   onSettingsUpdated: (cb) => {
     if (typeof cb !== 'function') return;
-    ipcRenderer.on('settings-updated', () => cb());
+    ipcRenderer.on('settings-updated', (_event, payload) => cb(payload));
   },
 });

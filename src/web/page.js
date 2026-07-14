@@ -2,8 +2,15 @@
 // Styled after the OpenAI "Research" index: top nav, big title, category
 // tabs, and an editorial list of entries. Clicking an entry opens an
 // article view with the rendered markdown (+ inline edit / delete).
-export const PAGE_HTML = /* html */ `<!DOCTYPE html>
-<html lang="zh">
+import { createTranslator, MESSAGES, normalizeLocale } from '../i18n.js';
+
+export function renderPage(locale = 'zh-CN') {
+  const normalized = normalizeLocale(locale);
+  const t = createTranslator(normalized);
+  const clientMessages = JSON.stringify(MESSAGES[normalized]).replace(/</g, '\\u003c');
+
+  return /* html */ `<!DOCTYPE html>
+<html lang="${normalized}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -34,10 +41,10 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
        The curve is a smooth "decelerate" (iOS-like) so it feels quick + settled. */
     --side-dur: .24s;
     --side-ease: cubic-bezier(.33, .9, .25, 1);
-    --titlebar: 36px;         /* desktop: clean top strip for macOS traffic lights */
+    --titlebar: 44px;         /* desktop: traffic lights + sidebar toggle */
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  * { box-sizing: border-box; scrollbar-width: none; }
+  html, body { margin: 0; height: 100%; overflow-x: hidden; }
   body {
     font-family: var(--sans); color: var(--fg); background: var(--bg);
     font-size: 15px; -webkit-font-smoothing: antialiased;
@@ -60,6 +67,27 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     max-width: var(--maxw); margin: 0 auto; padding: 16px 24px;
     display: flex; align-items: center; gap: 26px;
   }
+  .nav-collapse {
+    width: 34px; height: 34px; border: 1px solid var(--faint); border-radius: 9px;
+    display: grid; place-items: center; flex: 0 0 auto;
+    color: var(--muted); background: #fff;
+    transition: color .12s, background .12s, border-color .12s;
+    -webkit-app-region: no-drag;
+  }
+  .nav-collapse:hover { color: var(--fg); background: var(--hover); border-color: #d8d8d8; }
+  .nav-collapse svg {
+    width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .desktop-titlebar {
+    display: none; position: fixed; top: 0; left: 0; right: 0; height: var(--titlebar);
+    z-index: 50; align-items: center; padding-left: 78px;
+    background: rgba(255,255,255,.97); -webkit-app-region: drag;
+  }
+  .desktop-titlebar .nav-collapse {
+    width: 32px; height: 32px; border-color: transparent; background: transparent;
+    -webkit-app-region: no-drag;
+  }
   /* Unified search / ask command bar (the single recall entry). */
   .cmdbar {
     flex: 1; display: flex; align-items: center; gap: 9px;
@@ -78,7 +106,7 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     flex-shrink: 0; font-family: inherit; font-size: 11.5px; color: var(--muted);
     background: #fff; border: 1px solid var(--faint); border-radius: 6px; padding: 2px 7px;
   }
-  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   .icon-btn {
     width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
     font-size: 15px; color: var(--fg); transition: background .12s;
@@ -98,58 +126,16 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
     overflow: hidden; will-change: transform;
     transition: transform var(--side-dur) var(--side-ease);
   }
-  /* Craft-style: the panel slides fully off-screen when hidden; the floating
-     #sideCtrl button brings it back. */
+  /* Craft-style: the panel slides fully off-screen when hidden; the toolbar
+     toggle remains in normal layout and brings it back. */
   body:not(.sidebar-open) #sidebar { transform: translateX(-100%); }
-
-  /* Floating sidebar control: a collapse toggle + a ⌄ menu living in the top
-     strip. Shown → sits at the panel's top-right; hidden → slides to the top
-     left (past the macOS traffic lights) as a small pill. */
-  #sideCtrl {
-    position: fixed; top: 6px; left: calc(var(--side-w) - 74px); height: 30px; z-index: 45;
-    display: flex; align-items: center; gap: 1px;
-    transition: left var(--side-dur) var(--side-ease);
-    -webkit-app-region: no-drag;
-  }
-  body:not(.sidebar-open) #sideCtrl {
-    left: 12px;
-    background: rgba(255,255,255,.92); border: 1px solid var(--faint); border-radius: 10px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.07); padding: 0 3px;
-    backdrop-filter: saturate(180%) blur(8px);
-  }
-  html.desktop body:not(.sidebar-open) #sideCtrl { left: 78px; }
-  .ctrl-btn {
-    width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
-    color: var(--muted); background: transparent; transition: background .12s, color .12s;
-  }
-  .ctrl-btn:hover { background: var(--hover); color: var(--fg); }
-  .ctrl-btn svg { fill: none; stroke: currentColor; stroke-width: 1.8;
-    stroke-linecap: round; stroke-linejoin: round; }
-  .ctrl-btn.collapse svg { width: 18px; height: 18px; }
-  .ctrl-btn.menu svg { width: 14px; height: 14px; }
-
-  #sideMenuPop {
-    position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px; z-index: 46;
-    background: var(--bg); border: 1px solid var(--faint); border-radius: 12px;
-    box-shadow: 0 16px 44px rgba(0,0,0,.16); padding: 6px; display: none;
-  }
-  #sideMenuPop.show { display: block; }
-  .menu-item {
-    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-    padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--fg);
-    background: transparent; transition: background .12s;
-  }
-  .menu-item:hover { background: var(--hover); }
-  .menu-item svg { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor;
-    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
 
   .side-brand {
     display: flex; align-items: center; gap: 11px; height: 45px;
     padding: 0 19px; margin-bottom: 8px; flex-shrink: 0; color: var(--fg); cursor: pointer;
   }
   .side-brand .mark { flex-shrink: 0; display: grid; place-items: center; }
-  .side-brand .mark svg { width: 21px; height: 21px; fill: none; stroke: currentColor;
-    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .side-brand .brand-logo { width: 24px; height: 24px; display: block; border-radius: 6px; }
   .side-brand .side-label { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
   .side-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
   .side-item {
@@ -184,21 +170,30 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   }
   .side-item.active .cat-dot { background: var(--fg); }
 
-  /* Compact MCP status pill at the bottom (shrunk from the old big card). */
-  .mcp-mini {
-    margin: auto 12px 4px; display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px; border-radius: 10px; border: 1px solid var(--faint);
-    background: #fafafa; cursor: pointer; overflow: hidden;
-    transition: border-color .12s, background .12s;
+  /* Persistent desktop actions at the bottom of the sidebar. */
+  .side-foot {
+    margin: auto 8px 4px; display: flex; flex-direction: column; align-items: stretch; gap: 2px;
   }
-  .mcp-mini:hover { border-color: #d8d8d8; background: #fff; }
+  .mcp-mini, .side-settings {
+    width: 100%; min-height: 38px; padding: 8px 11px; border: 0; border-radius: 9px;
+    align-items: center; gap: 11px; color: var(--muted); background: transparent;
+    text-align: left; white-space: nowrap; transition: color .12s, background .12s;
+  }
+  .mcp-mini { display: none; cursor: pointer; }
+  html.desktop .mcp-mini { display: flex; }
+  .mcp-mini:hover, .side-settings:hover { color: var(--fg); background: var(--hover); }
   .mcp-dot {
     width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0;
     box-shadow: 0 0 0 3px rgba(34,197,94,.16);
   }
   .mcp-text {
-    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .side-settings { display: none; }
+  .side-settings.desktop-visible { display: flex; }
+  .side-settings svg {
+    width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
   }
 
   /* ---------- Settings modal (in-page, desktop) ---------- */
@@ -229,12 +224,12 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   .set-field { margin-bottom: 12px; }
   .set-field:last-child { margin-bottom: 4px; }
   .set-field label { display: block; font-size: 12.5px; font-weight: 500; margin-bottom: 5px; }
-  .set-field input {
+  .set-field input, .set-field select {
     width: 100%; padding: 9px 11px; border: 1px solid var(--faint); border-radius: 9px;
     font-family: inherit; font-size: 13.5px; color: var(--fg); background: #fff; outline: none;
     transition: border-color .12s, box-shadow .12s;
   }
-  .set-field input:focus { border-color: #c4c4c4; box-shadow: 0 0 0 3px rgba(0,0,0,.05); }
+  .set-field input:focus, .set-field select:focus { border-color: #c4c4c4; box-shadow: 0 0 0 3px rgba(0,0,0,.05); }
   .set-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .set-vault { display: flex; align-items: center; gap: 10px; }
   .set-vault code {
@@ -254,6 +249,18 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   .set-btn:hover { background: var(--hover); }
   .set-btn.primary { background: var(--fg); color: #fff; border-color: var(--fg); }
   .set-btn.primary:hover { background: var(--fg); opacity: .85; }
+  .mcp-status {
+    display: flex; align-items: center; gap: 9px; padding: 12px 14px;
+    border-radius: 10px; background: #f2faf4; color: #24743a; font-size: 13.5px; font-weight: 500;
+  }
+  .mcp-status .mcp-dot { box-shadow: none; }
+  .mcp-copy-row { display: flex; align-items: stretch; gap: 10px; }
+  .mcp-code {
+    flex: 1; min-width: 0; margin: 0; padding: 11px 12px; border: 1px solid var(--faint);
+    border-radius: 9px; background: var(--chip); color: var(--fg); font: 12px/1.6 var(--mono);
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
+  }
+  .mcp-copy-row .set-btn { align-self: center; flex-shrink: 0; }
   @media (max-width: 560px) { .set-grid2 { grid-template-columns: 1fr; } }
 
   .container { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
@@ -548,10 +555,8 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   }
   .toast.show { opacity: .95; }
 
-  ::-webkit-scrollbar { width: 11px; height: 11px; }
-  ::-webkit-scrollbar-thumb { background: #e2e2e2; border-radius: 8px; border: 3px solid transparent;
-    background-clip: content-box; }
-  ::-webkit-scrollbar-thumb:hover { background: #cfcfcf; background-clip: content-box; }
+  /* Keep wheel/trackpad/keyboard scrolling, but remove the visual rails. */
+  ::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
   @media (max-width: 1024px) {
     .article-body, .article-body.no-toc { grid-template-columns: minmax(0, 760px); }
@@ -571,113 +576,94 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   }
 
   /* ---------- Desktop (Electron) window chrome ---------- */
-  /* Only applies inside the Electron shell (html.desktop). Reserves a clean
-     36px title strip at the very top for the macOS traffic-light buttons so
-     they never collide with the sidebar divider, the icons or the content, and
-     turns the top strip / nav into a draggable window region. No effect in a
-     normal browser tab, where -webkit-app-region is simply ignored. */
+  /* Electron gets a dedicated draggable titlebar containing only the native
+     traffic lights and sidebar toggle. The browser keeps its toggle in #nav. */
+  html.desktop .desktop-titlebar { display: flex; }
+  html.desktop .browser-collapse { display: none; }
   html.desktop #sidebar { padding-top: var(--titlebar); border-right: none; }
-  html.desktop #sidebar::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: var(--titlebar);
-    -webkit-app-region: drag; z-index: 40;
-  }
-  /* Draw the sidebar's right-hand divider only BELOW the title strip, so the
-     top 36px reads as one uninterrupted strip that the traffic lights sit in. */
+  /* Draw the sidebar divider only below the shared titlebar. */
   html.desktop #sidebar::after {
     content: ''; position: absolute; top: var(--titlebar); right: 0; bottom: 0; width: 1px;
     background: var(--faint); pointer-events: none;
   }
-  html.desktop #nav { -webkit-app-region: drag; }
-  /* Push the nav's content below the title strip so the search bar no longer
-     crowds the traffic lights; the strip above stays empty + draggable. */
-  html.desktop .nav-inner { padding-top: 32px; }
-  html.desktop #nav .cmdbar,
-  html.desktop #nav .nav-right { -webkit-app-region: no-drag; }
+  html.desktop #nav { margin-top: var(--titlebar); }
 </style>
 </head>
 <body class="sidebar-open">
-  <div id="sideCtrl">
-    <button class="ctrl-btn collapse" id="sideCollapse" title="显示 / 隐藏侧栏">
+  <div id="desktopTitlebar" class="desktop-titlebar">
+    <button class="nav-collapse" id="sideCollapse" data-sidebar-toggle title="${t('sidebar.toggle')}" aria-label="${t('sidebar.toggle')}">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
     </button>
-    <button class="ctrl-btn menu" id="sideMenu" title="更多">
-      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-    <div id="sideMenuPop">
-      <button class="menu-item" id="miSettings" style="display:none">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        设置…
-      </button>
-      <button class="menu-item" id="miVault" style="display:none">
-        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-        更换知识库…
-      </button>
-      <button class="menu-item" id="miCopy">
-        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        复制 MCP 地址
-      </button>
-    </div>
   </div>
   <aside id="sidebar">
     <div class="side-brand" id="sideBrand" title="Wikinest">
-      <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+      <span class="mark"><img class="brand-logo" src="/assets/icon.png" alt="" /></span>
       <span class="side-label">Wikinest</span>
     </div>
     <nav class="side-nav">
       <button class="side-item" data-side="all">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
-        <span class="side-label">全部笔记</span><span class="side-count" id="cntAll"></span>
+        <span class="side-label">${t('nav.allNotes')}</span><span class="side-count" id="cntAll"></span>
       </button>
       <button class="side-item" data-side="ask" id="askNav" style="display:none">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
-        <span class="side-label">问一问</span>
+        <span class="side-label">${t('nav.ask')}</span>
       </button>
       <button class="side-item" data-side="digest">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/></svg></span>
-        <span class="side-label">AI 综述</span><span class="side-count" id="cntDigest"></span>
+        <span class="side-label">${t('nav.aiDigest')}</span><span class="side-count" id="cntDigest"></span>
       </button>
       <button class="side-item" data-side="recent">
         <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></span>
-        <span class="side-label">最近写入</span>
+        <span class="side-label">${t('nav.recent')}</span>
       </button>
     </nav>
     <div class="side-sec">
-      <div class="side-sec-label">分类</div>
+      <div class="side-sec-label">${t('nav.categories')}</div>
       <div class="side-cats" id="sideCats"></div>
     </div>
-    <div class="mcp-mini" id="mcpAddr" title="MCP 写入 · 已连接,点击复制地址">
-      <span class="mcp-dot"></span>
-      <span class="mcp-text">加载中…</span>
+    <div class="side-foot">
+      <button class="mcp-mini" id="mcpAddr" title="${t('sidebar.mcpDetails')}">
+        <span class="mcp-dot"></span>
+        <span class="mcp-text">${t('nav.mcpRunning')}</span>
+      </button>
+      <button class="side-settings" id="sideSettings" title="${t('app.settings')}" aria-label="${t('sidebar.openSettings')}">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06-.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>${t('app.settings')}</span>
+      </button>
     </div>
   </aside>
 
   <nav id="nav">
     <div class="nav-inner">
+      <button class="nav-collapse browser-collapse" id="webSideCollapse" data-sidebar-toggle title="${t('sidebar.toggle')}" aria-label="${t('sidebar.toggle')}">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      </button>
       <div class="cmdbar" id="cmdbar">
         <svg class="cmd-ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="search" autocomplete="off" placeholder="搜索或提问…" />
-        <kbd class="cmd-kbd" id="cmdKbd" style="display:none">↵ 问一问</kbd>
+        <input id="search" autocomplete="off" placeholder="${t('toolbar.search')}" />
+        <kbd class="cmd-kbd" id="cmdKbd" style="display:none">${t('toolbar.askHint')}</kbd>
       </div>
       <div class="nav-right">
-        <button class="btn-primary" id="newBtn">＋ 新建</button>
-        <button class="icon-btn" id="logoutBtn" title="登出" style="display:none">&#9099;</button>
+        <button class="btn-primary" id="newBtn">${t('toolbar.new')}</button>
+        <button class="icon-btn" id="logoutBtn" title="${t('toolbar.logout')}" style="display:none">&#9099;</button>
       </div>
     </div>
   </nav>
 
   <main id="indexView" class="container">
     <div class="index-head">
-      <h1 class="page-title" id="idxTitle">全部笔记</h1>
+      <h1 class="page-title" id="idxTitle">${t('nav.allNotes')}</h1>
       <span class="idx-count" id="idxCount"></span>
     </div>
     <div class="controls">
       <div class="cur-filter" id="curFilter"></div>
       <div class="control-right">
-        <button class="ghost select-btn" id="selectBtn" title="多选合成一篇" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>选择</button>
-        <button class="ghost" id="sortBtn">排序 · 最新 &#8964;</button>
+        <button class="ghost select-btn" id="selectBtn" title="${t('actions.synthesize')}" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>${t('actions.select')}</button>
+        <button class="ghost" id="sortBtn">${t('actions.sortNewest')}</button>
         <div class="view-toggle">
-          <button class="vt" data-view="grid" title="网格">&#9638;</button>
-          <button class="vt active" data-view="list" title="列表">&#9776;</button>
+          <button class="vt" data-view="grid" title="${t('actions.grid')}">&#9638;</button>
+          <button class="vt active" data-view="list" title="${t('actions.list')}">&#9776;</button>
         </div>
       </div>
     </div>
@@ -687,14 +673,14 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
 
   <main id="articleView" class="container" style="display:none">
     <div class="article-bar">
-      <button class="backBtn" id="backBtn">&#8592; 返回列表</button>
+      <button class="backBtn" id="backBtn">${t('actions.backToList')}</button>
       <div class="article-actions">
-        <button id="tidyBtn" style="display:none">🪄 整理</button>
-        <button id="editBtn">编辑</button>
-        <button id="renameBtn">重命名</button>
-        <button id="delBtn">删除</button>
-        <button id="saveBtn" class="btn-primary" style="display:none">保存</button>
-        <button id="cancelBtn" style="display:none">取消</button>
+        <button id="tidyBtn" style="display:none">${t('actions.tidy')}</button>
+        <button id="editBtn">${t('actions.edit')}</button>
+        <button id="renameBtn">${t('actions.rename')}</button>
+        <button id="delBtn">${t('actions.delete')}</button>
+        <button id="saveBtn" class="btn-primary" style="display:none">${t('app.save')}</button>
+        <button id="cancelBtn" style="display:none">${t('app.cancel')}</button>
       </div>
     </div>
 
@@ -718,9 +704,9 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
 
     <div class="editor" id="editor" style="display:none">
       <div class="editor-tools">
-        <button id="previewToggle" class="ed-btn">预览</button>
-        <button id="aiTidyBtn" class="ed-btn" style="display:none">🪄 AI 整理</button>
-        <span class="ed-hint">支持粘贴/拖拽图片 · Cmd/Ctrl+S 保存</span>
+        <button id="previewToggle" class="ed-btn">${t('actions.preview')}</button>
+        <button id="aiTidyBtn" class="ed-btn" style="display:none">${t('actions.aiTidy')}</button>
+        <span class="ed-hint">${t('editor.hint')}</span>
       </div>
       <div class="editor-split" id="editorSplit">
         <textarea id="ta" spellcheck="false"></textarea>
@@ -735,30 +721,42 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   </main>
 
   <div class="selection-bar" id="selectionBar">
-    <span class="sb-count">已选 <b id="selCount">0</b> 篇</span>
-    <button class="sb-cancel" id="selCancel">取消</button>
-    <button class="sb-go" id="selGo">✨ 合成为一篇</button>
+    <span class="sb-count">${t('selection.count', { count: '<b id="selCount">0</b>' })}</span>
+    <button class="sb-cancel" id="selCancel">${t('app.cancel')}</button>
+    <button class="sb-go" id="selGo">${t('actions.synthesize')}</button>
   </div>
 
   <div class="set-overlay" id="setOverlay">
-    <div class="set-modal" role="dialog" aria-modal="true" aria-label="设置">
+    <div class="set-modal" role="dialog" aria-modal="true" aria-label="${t('app.settings')}">
       <div class="set-head">
-        <h2>设置</h2>
-        <span class="set-lead">保存在本机 · 大模型 / 存储改动即时生效,无需重启</span>
+        <h2>${t('app.settings')}</h2>
+        <span class="set-lead">${t('settings.lead')}</span>
       </div>
       <div class="set-body">
         <div class="set-group">
-          <div class="set-legend">知识库(Vault)</div>
-          <div class="set-note">当前打开的文件夹。更换后应用会重启并读取新文件夹里的笔记。</div>
-          <div class="set-vault">
-            <code id="setVaultPath">—</code>
-            <button class="set-btn" id="setChooseVault">更换…</button>
+          <div class="set-legend">${t('settings.interface')}</div>
+          <div class="set-note">${t('settings.interfaceNote')}</div>
+          <div class="set-field">
+            <label for="UI_LOCALE">${t('settings.interfaceLanguage')}</label>
+            <select id="UI_LOCALE">
+              <option value="en">English</option>
+              <option value="zh-CN">简体中文</option>
+            </select>
           </div>
         </div>
 
         <div class="set-group">
-          <div class="set-legend">大模型(LLM)</div>
-          <div class="set-note">OpenAI 兼容接口即可:OpenAI / DeepSeek / 通义千问 / 自建。填了才会启用自动分类、整理、综述、问答。</div>
+          <div class="set-legend">${t('settings.vault')}</div>
+          <div class="set-note">${t('settings.vaultNote')}</div>
+          <div class="set-vault">
+            <code id="setVaultPath">—</code>
+            <button class="set-btn" id="setChooseVault">${t('settings.change')}</button>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">${t('settings.llm')}</div>
+          <div class="set-note">${t('settings.llmNote')}</div>
           <div class="set-field">
             <label for="LLM_BASE_URL">Base URL</label>
             <input id="LLM_BASE_URL" placeholder="https://api.deepseek.com/v1" />
@@ -768,14 +766,14 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
             <input id="LLM_API_KEY" type="password" placeholder="sk-..." />
           </div>
           <div class="set-field">
-            <label for="LLM_MODEL">模型</label>
+            <label for="LLM_MODEL">${t('settings.model')}</label>
             <input id="LLM_MODEL" placeholder="deepseek-chat / gpt-4o-mini / qwen-plus" />
           </div>
         </div>
 
         <div class="set-group">
-          <div class="set-legend">向量检索(Embedding,可选)</div>
-          <div class="set-note">留空则复用上面的 LLM 配置。若你的 LLM 服务商没有 embeddings 接口(如 DeepSeek),在此单独指定。默认模型 text-embedding-v4。</div>
+          <div class="set-legend">${t('settings.embedding')}</div>
+          <div class="set-note">${t('settings.embeddingNote')}</div>
           <div class="set-field">
             <label for="EMBED_BASE_URL">Embed Base URL</label>
             <input id="EMBED_BASE_URL" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
@@ -786,22 +784,22 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
               <input id="EMBED_API_KEY" type="password" placeholder="sk-..." />
             </div>
             <div class="set-field">
-              <label for="EMBED_MODEL">Embed 模型</label>
+              <label for="EMBED_MODEL">${t('settings.embedModel')}</label>
               <input id="EMBED_MODEL" placeholder="text-embedding-v4" />
             </div>
           </div>
         </div>
 
         <div class="set-group">
-          <div class="set-legend">图片存储(S3 兼容,可选)</div>
-          <div class="set-note">AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用。填了才能在编辑器里粘贴 / 拖拽上传图片。</div>
+          <div class="set-legend">${t('settings.storage')}</div>
+          <div class="set-note">${t('settings.storageNote')}</div>
           <div class="set-grid2">
             <div class="set-field">
               <label for="S3_BUCKET">Bucket</label>
               <input id="S3_BUCKET" placeholder="my-wiki-images" />
             </div>
             <div class="set-field">
-              <label for="S3_PUBLIC_BASE_URL">公开访问 URL 前缀</label>
+              <label for="S3_PUBLIC_BASE_URL">${t('settings.publicUrl')}</label>
               <input id="S3_PUBLIC_BASE_URL" placeholder="https://images.example.com" />
             </div>
           </div>
@@ -817,7 +815,7 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
           </div>
           <div class="set-grid2">
             <div class="set-field">
-              <label for="S3_ENDPOINT">Endpoint(R2/OSS/MinIO 需要)</label>
+              <label for="S3_ENDPOINT">${t('settings.endpoint')}</label>
               <input id="S3_ENDPOINT" placeholder="https://<account>.r2.cloudflarestorage.com" />
             </div>
             <div class="set-field">
@@ -827,12 +825,12 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
           </div>
           <div class="set-grid2">
             <div class="set-field">
-              <label for="S3_KEY_PREFIX">Key 前缀</label>
+              <label for="S3_KEY_PREFIX">${t('settings.keyPrefix')}</label>
               <input id="S3_KEY_PREFIX" placeholder="wiki-images/" />
             </div>
             <div class="set-field">
-              <label for="S3_FORCE_PATH_STYLE">Path-style(MinIO 填 true)</label>
-              <input id="S3_FORCE_PATH_STYLE" placeholder="true / 留空" />
+              <label for="S3_FORCE_PATH_STYLE">${t('settings.pathStyle')}</label>
+              <input id="S3_FORCE_PATH_STYLE" placeholder="${t('settings.trueOrBlank')}" />
             </div>
           </div>
         </div>
@@ -840,8 +838,60 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
       <div class="set-foot">
         <span class="set-status" id="setStatus"></span>
         <span class="spacer"></span>
-        <button class="set-btn" id="setCancel">取消</button>
-        <button class="set-btn primary" id="setSave">保存</button>
+        <button class="set-btn" id="setCancel">${t('app.cancel')}</button>
+        <button class="set-btn primary" id="setSave">${t('app.save')}</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="set-overlay" id="mcpOverlay">
+    <div class="set-modal" role="dialog" aria-modal="true" aria-label="${t('mcp.title')}">
+      <div class="set-head">
+        <h2>${t('mcp.title')}</h2>
+        <span class="set-lead">${t('mcp.lead')}</span>
+      </div>
+      <div class="set-body">
+        <div class="mcp-status">
+          <span class="mcp-dot"></span>
+          <span>${t('mcp.serviceRunning')}</span>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">${t('mcp.address')}</div>
+          <div class="set-note">${t('mcp.addressNote')}</div>
+          <div class="mcp-copy-row">
+            <code class="mcp-code" id="mcpLocalAddress">http://127.0.0.1:4321/mcp</code>
+            <button class="set-btn" id="mcpCopyAddress">${t('mcp.copy')}</button>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">${t('mcp.cursorConfig')}</div>
+          <div class="set-note">${t('mcp.cursorNote')}</div>
+          <div class="mcp-copy-row">
+            <pre class="mcp-code" id="mcpCursorConfig">{
+  "mcpServers": {
+    "wikinest-local": {
+      "url": "http://127.0.0.1:4321/mcp"
+    }
+  }
+}</pre>
+            <button class="set-btn" id="mcpCopyCursor">${t('mcp.copyConfig')}</button>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-legend">${t('mcp.claudeConfig')}</div>
+          <div class="set-note">${t('mcp.claudeNote')}</div>
+          <div class="mcp-copy-row">
+            <code class="mcp-code" id="mcpClaudeCommand">claude mcp add --scope user --transport http wikinest-local http://127.0.0.1:4321/mcp</code>
+            <button class="set-btn" id="mcpCopyClaude">${t('mcp.copyCommand')}</button>
+          </div>
+        </div>
+      </div>
+      <div class="set-foot">
+        <span class="spacer"></span>
+        <button class="set-btn" id="mcpClose">${t('app.close')}</button>
       </div>
     </div>
   </div>
@@ -849,10 +899,21 @@ export const PAGE_HTML = /* html */ `<!DOCTYPE html>
   <div class="toast" id="toast"></div>
 
 <script>
+const UI_LOCALE = ${JSON.stringify(normalized)};
+const UI_MESSAGES = ${clientMessages};
+function tr(key, params = {}) {
+  const template = UI_MESSAGES[key] || key;
+  return template.replace(/\\{(\\w+)\\}/g, (_, name) => String(params[name] ?? '{' + name + '}'));
+}
 const $ = (id) => document.getElementById(id);
+const TAB_ALL = '__all__';
+const TAB_UNCATEGORIZED = '__uncategorized__';
+const DATE_FORMATTER = new Intl.DateTimeFormat(UI_LOCALE, {
+  year: 'numeric', month: 'short', day: 'numeric',
+});
 
 let items = [];          // index items {path, folder, title, date, desc}
-let activeTab = '全部';
+let activeTab = TAB_ALL;
 let sortNewest = true;
 let viewMode = 'list';
 let recentMode = false;  // "最近" nav entry: latest notes across all folders
@@ -866,6 +927,15 @@ let currentRaw = '';
 let draftMode = false;   // "新建" opened a blank editor not yet saved
 let draftTidied = false; // whether the draft was already AI-tidied
 
+const ERROR_MESSAGE_KEYS = {
+  LLM_NOT_CONFIGURED: 'errors.llmNotConfigured',
+  STORAGE_NOT_CONFIGURED: 'errors.storageNotConfigured',
+  RAG_NOT_CONFIGURED: 'errors.ragNotConfigured',
+  UNAUTHORIZED: 'errors.unauthorized',
+  INVALID_CREDENTIALS: 'errors.invalidCredentials',
+  RATE_LIMITED: 'errors.rateLimited',
+};
+
 async function api(url, opts) {
   const r = await fetch(url, opts);
   if (r.status === 401) {
@@ -873,13 +943,26 @@ async function api(url, opts) {
     location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
     throw new Error('unauthorized');
   }
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    const key = ERROR_MESSAGE_KEYS[body.code];
+    const message = key
+      ? tr(key)
+      : tr('errors.operationFailed', { message: body.error || r.statusText });
+    throw new Error(message);
+  }
   return r.json();
 }
 
 function topFolder(folder) {
-  if (!folder) return '未分类';
+  if (!folder) return TAB_UNCATEGORIZED;
   return folder.split('/')[0];
+}
+
+function categoryLabel(value) {
+  if (value === TAB_ALL) return tr('nav.allNotes');
+  if (value === TAB_UNCATEGORIZED) return tr('categories.uncategorized');
+  return value;
 }
 
 // What counts as a browsable "note" in the list/category views: real notes plus
@@ -891,7 +974,7 @@ function fmtDate(s) {
   if (!s) return '';
   const d = new Date(s);
   if (isNaN(d)) return s;
-  return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日';
+  return DATE_FORMATTER.format(d);
 }
 
 async function loadIndex() {
@@ -920,7 +1003,7 @@ function showDigests() {
   showIndex();
   digestMode = true;
   recentMode = false;
-  activeTab = '全部';
+  activeTab = TAB_ALL;
   $('search').value = '';
   renderTabs();
   $('digestBanner').innerHTML = '';
@@ -929,7 +1012,7 @@ function showDigests() {
   const el = $('list');
   el.className = 'list as-list';
   if (!list.length) {
-    el.innerHTML = '<div class="empty">还没有 AI 综述。进入某个分类后点「生成综述」即可。</div>';
+    el.innerHTML = '<div class="empty">' + tr('empty.noDigests') + '</div>';
   } else {
     renderList(list);
   }
@@ -943,61 +1026,44 @@ function applySidebar(open) {
   try { localStorage.setItem(SIDEBAR_KEY, open ? '1' : '0'); } catch (e) {}
 }
 
-function copyMcpAddr() {
-  navigator.clipboard.writeText(location.origin).then(() => toast('已复制地址')).catch(() => {});
-}
-
 function wireSidebar() {
   const brand = $('sideBrand');
-  if (brand) brand.onclick = () => { showIndex(); selectTab('全部'); };
+  if (brand) brand.onclick = () => { showIndex(); selectTab(TAB_ALL); };
 
-  // Craft-style collapse toggle: slide the whole panel in / out.
-  const collapse = $('sideCollapse');
-  if (collapse) collapse.onclick = () => applySidebar(!document.body.classList.contains('sidebar-open'));
+  // Desktop and browser render the toggle in different rows, but share the
+  // same sidebar state and behavior.
+  document.querySelectorAll('[data-sidebar-toggle]').forEach((toggle) => {
+    toggle.onclick = () => applySidebar(!document.body.classList.contains('sidebar-open'));
+  });
 
   document.querySelectorAll('.side-item').forEach(b => {
     b.onclick = () => {
       const act = b.dataset.side;
-      if (act === 'all') { showIndex(); selectTab('全部'); }
+      if (act === 'all') { showIndex(); selectTab(TAB_ALL); }
       else if (act === 'ask') { openAsk(); }
       else if (act === 'digest') { showDigests(); }
       else if (act === 'recent') { showIndex(); showRecent(); }
     };
   });
 
-  // ⌄ dropdown menu (settings / switch vault / copy MCP address).
-  const menuBtn = $('sideMenu');
-  const pop = $('sideMenuPop');
-  const closeMenu = () => pop && pop.classList.remove('show');
-  if (menuBtn && pop) {
-    menuBtn.onclick = (e) => { e.stopPropagation(); pop.classList.toggle('show'); };
-    document.addEventListener('click', (e) => {
-      if (pop.classList.contains('show') && !pop.contains(e.target) && !menuBtn.contains(e.target)) closeMenu();
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  // Settings is a persistent sidebar-footer action in the desktop app. Vault
+  // switching remains inside that modal; browsers do not expose the IPC bridge.
+  const settingsButton = $('sideSettings');
+  if (settingsButton && window.wikiSettings) {
+    settingsButton.classList.add('desktop-visible');
+    settingsButton.onclick = openSettings;
   }
-  // Settings + switch-vault need the desktop IPC bridge; hidden in the browser.
-  if (window.wikiSettings) {
-    const mi = $('miSettings');
-    if (mi) { mi.style.display = ''; mi.onclick = () => { closeMenu(); openSettings(); }; }
-    const mv = $('miVault');
-    if (mv) { mv.style.display = ''; mv.onclick = () => { closeMenu(); try { window.wikiSettings.chooseVault(); } catch (e) {} }; }
-  }
-  const mc = $('miCopy');
-  if (mc) mc.onclick = () => { closeMenu(); copyMcpAddr(); };
 
   const addr = $('mcpAddr');
   if (addr) {
-    const t = addr.querySelector('.mcp-text');
-    if (t) t.textContent = 'mcp wiki:' + location.host;
-    addr.onclick = copyMcpAddr;
+    addr.onclick = openMcpModal;
   }
 }
 
 function showRecent() {
   recentMode = true;
   digestMode = false;
-  activeTab = '全部';
+  activeTab = TAB_ALL;
   $('search').value = '';
   renderTabs();
   renderList();
@@ -1019,20 +1085,20 @@ function renderTabs() {
   if (wrap) {
     wrap.innerHTML = '';
     const addRow = (name) => {
-      const count = name === '未分类'
+      const count = name === TAB_UNCATEGORIZED
         ? items.filter(i => isNote(i) && !(i.categories || []).length).length
         : items.filter(i => isNote(i) && (i.categories || []).includes(name)).length;
       const b = document.createElement('button');
       b.className = 'side-item';
       b.dataset.side = name;
       b.innerHTML = '<span class="cat-dot"></span><span class="side-label"></span><span class="side-count"></span>';
-      b.querySelector('.side-label').textContent = name;
+      b.querySelector('.side-label').textContent = categoryLabel(name);
       b.querySelector('.side-count').textContent = count;
       b.onclick = () => { showIndex(); selectTab(name); };
       wrap.appendChild(b);
     };
     cats.forEach(addRow);
-    if (hasUncat) addRow('未分类');
+    if (hasUncat) addRow(TAB_UNCATEGORIZED);
   }
   updateCurFilter();
   syncActiveSide();
@@ -1042,13 +1108,13 @@ function renderTabs() {
 function updateCurFilter() {
   const notes = items.filter(isNote);
   let label, n;
-  if (recentMode) { label = '最近写入'; n = Math.min(RECENT_LIMIT, notes.length); }
-  else if (digestMode) { label = 'AI 综述'; n = items.filter(i => i.digest).length; }
-  else if (activeTab === '全部') { label = '全部笔记'; n = notes.length; }
-  else if (activeTab === '未分类') { label = '未分类'; n = notes.filter(i => !(i.categories || []).length).length; }
+  if (recentMode) { label = tr('nav.recent'); n = Math.min(RECENT_LIMIT, notes.length); }
+  else if (digestMode) { label = tr('nav.aiDigest'); n = items.filter(i => i.digest).length; }
+  else if (activeTab === TAB_ALL) { label = tr('nav.allNotes'); n = notes.length; }
+  else if (activeTab === TAB_UNCATEGORIZED) { label = tr('categories.uncategorized'); n = notes.filter(i => !(i.categories || []).length).length; }
   else { label = activeTab; n = notes.filter(i => (i.categories || []).includes(activeTab)).length; }
   const t = $('idxTitle'); if (t) t.textContent = label;
-  const c = $('idxCount'); if (c) c.textContent = n + ' 篇';
+  const c = $('idxCount'); if (c) c.textContent = tr('notes.count', { count: n });
   const cf = $('curFilter'); if (cf) cf.textContent = '';
 }
 
@@ -1057,7 +1123,7 @@ function syncActiveSide() {
   let key = 'all';
   if (recentMode) key = 'recent';
   else if (digestMode) key = 'digest';
-  else if (activeTab !== '全部') key = activeTab;
+  else if (activeTab !== TAB_ALL) key = activeTab;
   setActiveSide(key);
 }
 
@@ -1073,8 +1139,8 @@ function selectTab(c) {
 function currentItems() {
   // Auto category digests show as a banner; custom syntheses show as rows.
   let list = items.filter(isNote);
-  if (!recentMode && activeTab !== '全部') {
-    if (activeTab === '未分类') list = list.filter(i => !(i.categories || []).length);
+  if (!recentMode && activeTab !== TAB_ALL) {
+    if (activeTab === TAB_UNCATEGORIZED) list = list.filter(i => !(i.categories || []).length);
     else list = list.filter(i => (i.categories || []).includes(activeTab));
   }
   list.sort((a, b) => {
@@ -1092,7 +1158,7 @@ function renderList(list) {
   if (custom) $('digestBanner').innerHTML = ''; else renderDigestBanner();
   const el = $('list');
   el.className = 'list ' + (viewMode === 'grid' ? 'as-grid' : 'as-list') + (selectMode ? ' selecting' : '');
-  if (!data.length) { el.innerHTML = '<div class="empty">还没有笔记。点右上角「新建」开始吧。</div>'; return; }
+  if (!data.length) { el.innerHTML = '<div class="empty">' + tr('empty.noNotes') + '</div>'; return; }
   el.innerHTML = '';
   for (const it of data) {
     const row = document.createElement('div');
@@ -1101,11 +1167,11 @@ function renderList(list) {
       '<div class="row-meta"><span class="row-cat"></span><span class="row-date"></span></div>' +
       '<div><div class="row-title"></div><div class="row-desc"></div></div>';
     row.querySelector('.row-cat').textContent =
-      (it.categories && it.categories.length) ? it.categories.join('、') : '未分类';
+      (it.categories && it.categories.length) ? it.categories.join(tr('punctuation.listSeparator')) : tr('categories.uncategorized');
     row.querySelector('.row-date').textContent = fmtDate(it.date);
     row.querySelector('.row-title').textContent = it.title;
     if (it.digest) {
-      row.querySelector('.row-title').insertAdjacentHTML('afterbegin', '<span class="row-badge">综述</span>');
+      row.querySelector('.row-title').insertAdjacentHTML('afterbegin', '<span class="row-badge">' + tr('badge.digest') + '</span>');
     }
     row.querySelector('.row-desc').textContent = it.desc || '';
     if (selectMode) {
@@ -1116,7 +1182,7 @@ function renderList(list) {
       if (it.digest) {
         // A synthesis can't be a source for another synthesis — make it unpickable.
         row.classList.add('nosel');
-        row.onclick = () => toast('「综述」不能作为合成来源,请选择原始笔记');
+        row.onclick = () => toast(tr('selection.digestUnavailable'));
       } else {
         if (selected.has(it.path)) row.classList.add('sel');
         row.onclick = () => {
@@ -1153,10 +1219,10 @@ function updateSelectionBar() {
 
 async function synthSelection() {
   const paths = [...selected];
-  if (paths.length < 2) { toast('至少选择 2 篇'); return; }
+  if (paths.length < 2) { toast(tr('selection.atLeastTwo')); return; }
   const go = $('selGo'); const label = go.textContent;
-  go.disabled = true; go.textContent = 'AI 合成中…';
-  toast('AI 合成中,标题也交给 AI…', 60000);
+  go.disabled = true; go.textContent = tr('status.synthesizing');
+  toast(tr('toast.synthesizing'), 60000);
   try {
     // Title left empty on purpose → the server lets the model name it.
     const r = await api('/api/digest/custom', {
@@ -1166,9 +1232,9 @@ async function synthSelection() {
     toggleSelectMode(false);
     await loadIndex();
     await openNote(r.path);
-    toast('已合成:' + (r.title || '综述') + ' · 可在文章页「重命名」修改');
+    toast(tr('toast.synthesized', { title: r.title || tr('badge.digest') }));
   } catch (e) {
-    alert('合成失败: ' + e.message);
+    alert(tr('errors.synthesisFailed', { message: e.message }));
   } finally {
     go.disabled = false; go.textContent = label;
   }
@@ -1180,7 +1246,7 @@ function renderDigestBanner() {
   if (!el) return;
   el.innerHTML = '';
   // Only for a specific real category (not 全部 / 未分类 / 最近).
-  if (recentMode || activeTab === '全部' || activeTab === '未分类') return;
+  if (recentMode || activeTab === TAB_ALL || activeTab === TAB_UNCATEGORIZED) return;
   const cat = activeTab;
   const digestItem = items.find(i => i.digest && !i.custom && i.category === cat);
   const count = items.filter(i => !i.digest && (i.categories || []).includes(cat)).length;
@@ -1190,26 +1256,27 @@ function renderDigestBanner() {
   card.className = 'digest-card';
   const main = document.createElement('div'); main.className = 'dc-main';
   const t = document.createElement('div'); t.className = 'dc-title';
-  t.textContent = '📚 「' + cat + '」AI 综述';
+  t.textContent = tr('digest.title', { category: cat });
   const sub = document.createElement('div'); sub.className = 'dc-sub';
   main.appendChild(t); main.appendChild(sub);
   const actions = document.createElement('div'); actions.className = 'dc-actions';
 
   if (digestItem) {
-    sub.textContent = '基于 ' + count + ' 篇笔记聚合' + (digestItem.date ? ' · 更新于 ' + fmtDate(digestItem.date) : '');
+    sub.textContent = tr('digest.basedOn', { count }) +
+      (digestItem.date ? tr('digest.updatedAt', { date: fmtDate(digestItem.date) }) : '');
     const view = document.createElement('button');
-    view.className = 'primary'; view.textContent = '查看综述';
+    view.className = 'primary'; view.textContent = tr('digest.view');
     view.onclick = () => openNote(digestItem.path);
     actions.appendChild(view);
     if (organizeEnabled) {
       const upd = document.createElement('button');
-      upd.textContent = '🔄 更新'; upd.onclick = () => genDigest(cat);
+      upd.textContent = tr('digest.update'); upd.onclick = () => genDigest(cat);
       actions.appendChild(upd);
     }
   } else {
-    sub.textContent = '把这 ' + count + ' 篇笔记聚合成一篇文章';
+    sub.textContent = tr('digest.description', { count });
     const gen = document.createElement('button');
-    gen.className = 'primary'; gen.textContent = '✨ 生成综述'; gen.onclick = () => genDigest(cat);
+    gen.className = 'primary'; gen.textContent = tr('digest.generate'); gen.onclick = () => genDigest(cat);
     actions.appendChild(gen);
   }
   card.appendChild(main); card.appendChild(actions);
@@ -1217,7 +1284,7 @@ function renderDigestBanner() {
 }
 
 async function genDigest(cat) {
-  toast('AI 聚合中,可能需要一会儿…', 60000);
+  toast(tr('toast.digestGenerating'), 60000);
   try {
     const r = await api('/api/digest', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1225,8 +1292,8 @@ async function genDigest(cat) {
     });
     await loadIndex();
     await openNote(r.path);
-    toast('综述已生成');
-  } catch (e) { alert('生成综述失败: ' + e.message); }
+    toast(tr('toast.digestGenerated'));
+  } catch (e) { alert(tr('errors.digestFailed', { message: e.message })); }
 }
 
 // ---------- view switching ----------
@@ -1249,16 +1316,16 @@ function showArticle() {
 // ---------- ask your wiki (RAG) ----------
 // The only input is the top command bar; this view just renders results.
 const ASK_SAMPLES = [
-  '我之前关于召回排序聊过什么?',
-  '帮我回忆一下产品定位的结论',
-  '关于效率工具我记过哪些?',
+  tr('ask.example1'),
+  tr('ask.example2'),
+  tr('ask.example3'),
 ];
 
 function askEmptyHTML() {
   const chips = ASK_SAMPLES.map(s => '<button class="ask-chip">' + s + '</button>').join('');
   return '<div class="ask-empty">'
-    + '<div class="ee-title">问知识库</div>'
-    + '<div class="ee-sub">在上方输入框用大白话提问,AI 会从你的笔记里检索并作答,带出处链接。</div>'
+    + '<div class="ee-title">' + tr('ask.title') + '</div>'
+    + '<div class="ee-sub">' + tr('ask.description') + '</div>'
     + '<div class="ask-chips">' + chips + '</div></div>';
 }
 
@@ -1285,16 +1352,16 @@ async function doAsk(query) {
   showAskView();
   $('askQ').textContent = q;
   $('askResult').dataset.answered = '1';
-  $('askResult').innerHTML = '<div class="ask-loading">正在检索你的笔记并作答…</div>';
+  $('askResult').innerHTML = '<div class="ask-loading">' + tr('ask.loading') + '</div>';
   try {
     const r = await api('/api/ask', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: q }),
     });
     $('askResult').innerHTML = '<div class="ask-answer content"></div>';
-    $('askResult').querySelector('.ask-answer').innerHTML = r.html || '(无内容)';
+    $('askResult').querySelector('.ask-answer').innerHTML = r.html || tr('ask.noContent');
   } catch (e) {
-    $('askResult').innerHTML = '<div class="ask-loading">出错了:' + e.message + '</div>';
+    $('askResult').innerHTML = '<div class="ask-loading">' + tr('ask.failed', { message: e.message }) + '</div>';
   }
 }
 
@@ -1321,7 +1388,7 @@ async function openNote(path) {
 function showView(html) {
   $('editor').style.display = 'none';
   $('articleRead').style.display = '';
-  $('content').innerHTML = html || '<p style="color:var(--muted)">(空)</p>';
+  $('content').innerHTML = html || '<p style="color:var(--muted)">' + tr('article.empty') + '</p>';
   buildToc();
   renderMermaid();
   $('editBtn').style.display = ''; $('delBtn').style.display = ''; $('renameBtn').style.display = '';
@@ -1413,7 +1480,7 @@ function startDraft() {
   $('articleRead').style.display = 'none';
   $('editor').style.display = '';
   $('ta').value = '';
-  $('ta').placeholder = '粘贴或直接输入内容…保存时 AI 会自动整理排版并归类,无需先起标题。';
+  $('ta').placeholder = tr('editor.placeholder');
   $('editBtn').style.display = 'none'; $('delBtn').style.display = 'none'; $('renameBtn').style.display = 'none';
   $('tidyBtn').style.display = 'none';
   $('aiTidyBtn').style.display = organizeEnabled ? '' : 'none';
@@ -1440,20 +1507,20 @@ function deriveTitle(md) {
     if (!t) continue;
     return t.replace(/[*_>#\\-]/g, '').trim().slice(0, 60);
   }
-  return '未命名';
+  return tr('editor.untitled');
 }
 
 async function saveDraft() {
   const raw = $('ta').value.trim();
-  if (!raw) { toast('内容为空,先写点什么吧'); return; }
+  if (!raw) { toast(tr('toast.emptyContent')); return; }
   const btn = $('saveBtn'); const label = btn.textContent;
   btn.disabled = true;
   try {
     let content = raw;
     // AI check/tidy the formatting before saving (unless already tidied).
     if (organizeEnabled && !draftTidied) {
-      btn.textContent = 'AI 整理中…';
-      toast('AI 整理排版中…', 30000);
+      btn.textContent = tr('status.aiTidying');
+      toast(tr('toast.aiTidying'), 30000);
       try {
         const t = await api('/api/tidy/preview', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1466,19 +1533,19 @@ async function saveDraft() {
     // only fall back to truncating the first line if AI is unavailable.
     let title = firstHeading(content);
     if (!title && organizeEnabled) {
-      btn.textContent = 'AI 命名中…';
+      btn.textContent = tr('status.aiNaming');
       try {
-        const tr = await api('/api/title', {
+        const titleResult = await api('/api/title', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content }),
         });
-        title = (tr.title || '').trim();
+        title = (titleResult.title || '').trim();
       } catch (e) { /* fall back below */ }
     }
     if (!title) title = deriveTitle(content);
     const slug = title.replace(/[\\s\\/\\\\]+/g, '-').slice(0, 60) || ('note-' + Date.now());
-    btn.textContent = '保存中…';
-    if (classifyEnabled) toast('保存中,正在自动归类…', 30000);
+    btn.textContent = tr('status.saving');
+    if (classifyEnabled) toast(tr('toast.savingClassifying'), 30000);
     const r = await api('/api/note', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: 'notes/' + slug, content, frontmatter: { title }, unique: true }),
@@ -1486,9 +1553,11 @@ async function saveDraft() {
     draftMode = false;
     await loadIndex();
     await openNote(r.path);
-    toast((r.categories && r.categories.length) ? '已保存 · 分类: ' + r.categories.join('、') : '已保存');
+    toast((r.categories && r.categories.length)
+      ? tr('toast.savedCategories', { categories: r.categories.join(tr('punctuation.listSeparator')) })
+      : tr('toast.saved'));
   } catch (e) {
-    alert('保存失败: ' + e.message);
+    alert(tr('errors.saveFailed', { message: e.message }));
   } finally {
     btn.disabled = false; btn.textContent = label;
   }
@@ -1558,17 +1627,17 @@ $('previewToggle').onclick = () => {
 $('renameBtn').onclick = async () => {
   if (!current) return;
   const cur = current.replace(/\\.md$/, '');
-  const to = prompt('新路径(可含子目录,例: notes/我的文章):', cur);
+  const to = prompt(tr('rename.prompt'), cur);
   if (!to || !to.trim() || to.trim() === cur) return;
   try {
     const r = await api('/api/note/rename', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: current, to: to.trim() }),
     });
-    toast('已重命名');
+    toast(tr('toast.renamed'));
     await loadIndex();
     await openNote(r.path);
-  } catch (e) { alert('重命名失败: ' + e.message); }
+  } catch (e) { alert(tr('errors.renameFailed', { message: e.message })); }
 };
 
 // ---------- categories ----------
@@ -1600,10 +1669,10 @@ $('askResult').addEventListener('click', (e) => {
 // Tidy the currently open note in place (overwrites body with cleaned markdown).
 $('tidyBtn').onclick = async () => {
   if (!current) return;
-  if (!confirm('用 AI 整理这篇的排版?会覆盖当前正文(只整理格式,不改内容)。')) return;
+  if (!confirm(tr('tidy.confirm'))) return;
   const btn = $('tidyBtn'); const label = btn.textContent;
-  btn.disabled = true; btn.textContent = '整理中…';
-  toast('整理中…', 30000);
+  btn.disabled = true; btn.textContent = tr('status.tidying');
+  toast(tr('status.tidying'), 30000);
   try {
     const r = await api('/api/tidy', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1611,8 +1680,8 @@ $('tidyBtn').onclick = async () => {
     });
     await loadIndex();
     await openNote(r.path);
-    toast('已整理排版');
-  } catch (e) { alert('整理失败: ' + e.message); }
+    toast(tr('toast.tidied'));
+  } catch (e) { alert(tr('errors.tidyFailed', { message: e.message })); }
   finally { btn.disabled = false; btn.textContent = label; }
 };
 
@@ -1621,7 +1690,7 @@ $('aiTidyBtn').onclick = async () => {
   const ta = $('ta');
   if (!ta.value.trim()) return;
   const btn = $('aiTidyBtn'); const label = btn.textContent;
-  btn.disabled = true; btn.textContent = '整理中…';
+  btn.disabled = true; btn.textContent = tr('status.tidying');
   try {
     const r = await api('/api/tidy/preview', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1630,8 +1699,8 @@ $('aiTidyBtn').onclick = async () => {
     ta.value = r.content || ta.value;
     draftTidied = true;
     updatePreview();
-    toast('已整理,确认后点保存');
-  } catch (e) { alert('整理失败: ' + e.message); }
+    toast(tr('toast.tidiedPending'));
+  } catch (e) { alert(tr('errors.tidyFailed', { message: e.message })); }
   finally { btn.disabled = false; btn.textContent = label; }
 };
 
@@ -1645,24 +1714,24 @@ function renderCats(catsRaw) {
     const chip = document.createElement('span');
     chip.className = 'cat-chip';
     const name = document.createElement('span');
-    name.className = 'name'; name.textContent = c; name.title = '点击重命名(作用于所有文章)';
+    name.className = 'name'; name.textContent = c; name.title = tr('categories.clickToRename');
     name.onclick = () => renameCat(c);
     const x = document.createElement('span');
-    x.className = 'x'; x.textContent = '✕'; x.title = '从本文移除';
+    x.className = 'x'; x.textContent = '✕'; x.title = tr('categories.removeFromNote');
     x.onclick = () => setCurrentCats(cats.filter(v => v !== c));
     chip.appendChild(name); chip.appendChild(x);
     el.appendChild(chip);
   });
   const add = document.createElement('button');
-  add.className = 'cat-add'; add.textContent = '＋ 分类';
+  add.className = 'cat-add'; add.textContent = tr('categories.add');
   add.onclick = () => {
-    const name = prompt('添加分类:');
+    const name = prompt(tr('categories.addPrompt'));
     if (name && name.trim()) setCurrentCats([...new Set([...cats, name.trim()])]);
   };
   el.appendChild(add);
   if (classifyEnabled) {
     const auto = document.createElement('button');
-    auto.className = 'cat-add'; auto.textContent = '🤖 自动归类';
+    auto.className = 'cat-add'; auto.textContent = tr('categories.auto');
     auto.onclick = autoClassifyCurrent;
     el.appendChild(auto);
   }
@@ -1679,7 +1748,7 @@ async function setCurrentCats(cats) {
 }
 
 async function renameCat(oldName) {
-  const to = prompt('把分类「' + oldName + '」重命名为(会作用到所有文章):', oldName);
+  const to = prompt(tr('categories.renamePrompt', { name: oldName }), oldName);
   if (!to || !to.trim() || to.trim() === oldName) return;
   await api('/api/categories/rename', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1690,7 +1759,7 @@ async function renameCat(oldName) {
 }
 
 async function autoClassifyCurrent() {
-  toast('分类中…', 8000);
+  toast(tr('categories.classifying'), 8000);
   try {
     const r = await api('/api/classify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1698,8 +1767,10 @@ async function autoClassifyCurrent() {
     });
     await loadIndex();
     renderCats(r.categories || []);
-    toast('分类: ' + (r.categories || []).join('、'));
-  } catch (e) { alert('自动归类失败: ' + e.message); }
+    toast(tr('categories.classified', {
+      categories: (r.categories || []).join(tr('punctuation.listSeparator')),
+    }));
+  } catch (e) { alert(tr('categories.autoFailed', { message: e.message })); }
 }
 
 // ---------- image upload (paste / drag-drop into the editor) ----------
@@ -1721,10 +1792,10 @@ function replaceToken(ta, token, replacement) {
 async function uploadFile(file) {
   const ta = $('ta');
   if (!uploadEnabled) {
-    alert('图片上传未启用:请先在服务端配置对象存储环境变量 (见 README)。');
+    alert(tr('upload.disabled'));
     return;
   }
-  const token = '![上传中… ' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + ']()';
+  const token = '![' + tr('upload.uploading') + ' ' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + ']()';
   insertAtCaret(ta, token + '\\n');
   try {
     const r = await fetch('/api/upload', {
@@ -1736,12 +1807,15 @@ async function uploadFile(file) {
       body: file,
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || r.statusText);
+    if (!r.ok) {
+      const key = ERROR_MESSAGE_KEYS[data.code];
+      throw new Error(key ? tr(key) : (data.error || r.statusText));
+    }
     const alt = (file.name || 'image').replace(/\\.[^.]+$/, '');
     replaceToken(ta, token, '![' + alt + '](' + data.url + ')');
   } catch (err) {
     replaceToken(ta, token, '');
-    alert('上传失败: ' + err.message);
+    alert(tr('errors.uploadFailed', { message: err.message }));
   }
 }
 
@@ -1771,16 +1845,18 @@ $('saveBtn').onclick = async () => {
   if (draftMode) return saveDraft();
   const btn = $('saveBtn');
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = '保存中…';
-  if (classifyEnabled) toast('保存中,正在自动归类…', 8000);
+  btn.disabled = true; btn.textContent = tr('status.saving');
+  if (classifyEnabled) toast(tr('toast.savingClassifying'), 8000);
   try {
     const r = await api('/api/note', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: current, content: $('ta').value }) });
     await loadIndex();
     await openNote(current);
-    toast((r.categories && r.categories.length) ? '已保存 · 分类: ' + r.categories.join('、') : '已保存');
+    toast((r.categories && r.categories.length)
+      ? tr('toast.savedCategories', { categories: r.categories.join(tr('punctuation.listSeparator')) })
+      : tr('toast.saved'));
   } catch (e) {
-    alert('保存失败: ' + e.message);
+    alert(tr('errors.saveFailed', { message: e.message }));
   } finally {
     btn.disabled = false; btn.textContent = label;
   }
@@ -1789,7 +1865,7 @@ $('saveBtn').onclick = async () => {
 $('newBtn').onclick = () => startDraft();
 
 $('delBtn').onclick = async () => {
-  if (!current || !confirm('删除 ' + current + ' ?')) return;
+  if (!current || !confirm(tr('delete.confirm', { path: current }))) return;
   await api('/api/note?path=' + encodeURIComponent(current), { method: 'DELETE' });
   await loadIndex();
   showIndex();
@@ -1797,7 +1873,9 @@ $('delBtn').onclick = async () => {
 
 $('sortBtn').onclick = () => {
   sortNewest = !sortNewest;
-  $('sortBtn').innerHTML = '排序 · ' + (sortNewest ? '最新' : '最早') + ' &#8964;';
+  $('sortBtn').textContent = tr('sort.label', {
+    order: tr(sortNewest ? 'sort.newest' : 'sort.oldest'),
+  });
   renderList();
 };
 
@@ -1843,8 +1921,8 @@ $('search').oninput = (e) => {
       const it = items.find(i => i.path === h.path);
       return it ? { ...it, desc: h.snippet } : { path: h.path, folder: '', title: h.title, date: '', desc: h.snippet };
     });
-    const t = $('idxTitle'); if (t) t.textContent = '搜索';
-    const c = $('idxCount'); if (c) c.textContent = mapped.length + ' 条结果';
+    const t = $('idxTitle'); if (t) t.textContent = tr('search.title');
+    const c = $('idxCount'); if (c) c.textContent = tr('search.results', { count: mapped.length });
     renderList(mapped);
   }, 200);
 };
@@ -1873,8 +1951,45 @@ const SETTING_KEYS = [
   'S3_ENDPOINT', 'S3_REGION', 'S3_KEY_PREFIX', 'S3_FORCE_PATH_STYLE',
 ];
 
+function copyMcpValue(elementId, successMessage) {
+  const value = $(elementId)?.textContent || '';
+  navigator.clipboard.writeText(value.trim())
+    .then(() => toast(successMessage))
+    .catch(() => toast(tr('copy.failed')));
+}
+
+function openMcpModal() {
+  closeSettings();
+  const localMcpUrl = location.origin + '/mcp';
+  $('mcpLocalAddress').textContent = localMcpUrl;
+  $('mcpCursorConfig').textContent = JSON.stringify({
+    mcpServers: {
+      'wikinest-local': { url: localMcpUrl },
+    },
+  }, null, 2);
+  $('mcpClaudeCommand').textContent =
+    'claude mcp add --scope user --transport http wikinest-local ' + localMcpUrl;
+  $('mcpOverlay').classList.add('show');
+}
+
+function closeMcpModal() { $('mcpOverlay').classList.remove('show'); }
+
+function wireMcpModal() {
+  const overlay = $('mcpOverlay');
+  if (!overlay) return;
+  $('mcpClose').onclick = closeMcpModal;
+  $('mcpCopyAddress').onclick = () => copyMcpValue('mcpLocalAddress', tr('copy.address'));
+  $('mcpCopyCursor').onclick = () => copyMcpValue('mcpCursorConfig', tr('copy.cursor'));
+  $('mcpCopyClaude').onclick = () => copyMcpValue('mcpClaudeCommand', tr('copy.claude'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeMcpModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) closeMcpModal();
+  });
+}
+
 async function openSettings() {
   if (!window.wikiSettings) return;
+  closeMcpModal();
   const overlay = $('setOverlay');
   $('setStatus').textContent = '';
   try {
@@ -1884,6 +1999,7 @@ async function openSettings() {
   try {
     const info = await window.wikiSettings.info();
     $('setVaultPath').textContent = (info && info.vaultDir) || '—';
+    $('UI_LOCALE').value = (info && info.locale) || UI_LOCALE;
   } catch (e) { /* ignore */ }
   overlay.classList.add('show');
 }
@@ -1893,8 +2009,8 @@ function closeSettings() { $('setOverlay').classList.remove('show'); }
 function wireSettings() {
   const overlay = $('setOverlay');
   if (!overlay) return;
-  // The settings entry now lives in the sidebar's ⌄ menu (see wireSidebar);
-  // this just wires the modal itself.
+  // The settings entry lives in the sidebar footer (see wireSidebar); this
+  // function wires the modal itself.
   $('setCancel').onclick = closeSettings;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSettings(); });
   document.addEventListener('keydown', (e) => {
@@ -1903,7 +2019,7 @@ function wireSettings() {
 
   $('setChooseVault').onclick = () => {
     if (!window.wikiSettings) return;
-    $('setStatus').textContent = '若选择了新文件夹,应用将重启…';
+    $('setStatus').textContent = tr('settings.vaultRestart');
     window.wikiSettings.chooseVault();
   };
 
@@ -1911,14 +2027,19 @@ function wireSettings() {
     if (!window.wikiSettings) return;
     const out = {};
     for (const k of SETTING_KEYS) out[k] = ($(k)?.value || '').trim();
-    $('setStatus').textContent = '保存中…';
+    out.locale = $('UI_LOCALE').value;
+    $('setStatus').textContent = tr('settings.saving');
     try {
       // LLM / Embedding / S3 改动会热生效(后端刷新 env),无需重启。
-      await window.wikiSettings.save(out);
+      const result = await window.wikiSettings.save(out);
+      if (result && result.localeChanged) {
+        location.reload();
+        return;
+      }
       await refreshFeatureFlags();
       closeSettings();
-      toast('设置已保存并生效');
-    } catch (e) { $('setStatus').textContent = '保存失败:' + e.message; }
+      toast(tr('toast.settingsSaved'));
+    } catch (e) { $('setStatus').textContent = tr('settings.saveFailed', { message: e.message }); }
   };
 
   // Menu (Cmd/Ctrl+,) and first-run can ask us to open the modal.
@@ -1928,7 +2049,15 @@ function wireSettings() {
   // A settings save (from here or the fallback window) hot-applies on the
   // backend; re-pull capability flags so the UI reflects it immediately.
   if (window.wikiSettings && window.wikiSettings.onSettingsUpdated) {
-    window.wikiSettings.onSettingsUpdated(() => refreshFeatureFlags());
+    window.wikiSettings.onSettingsUpdated((payload) => {
+      if (payload && payload.localeChanged) {
+        // The in-page save handler reloads after its IPC promise resolves.
+        // This branch covers a save from the standalone fallback window.
+        if (!$('setOverlay').classList.contains('show')) location.reload();
+        return;
+      }
+      refreshFeatureFlags();
+    });
   }
 }
 
@@ -1953,10 +2082,11 @@ async function refreshFeatureFlags() {
   // rag (ask) gates
   if ($('askNav')) $('askNav').style.display = ragEnabled ? '' : 'none';
   if ($('cmdKbd')) $('cmdKbd').style.display = ragEnabled ? '' : 'none';
-  $('search').placeholder = ragEnabled ? '搜索或提问…' : '搜索全部笔记…';
+  $('search').placeholder = tr(ragEnabled ? 'toolbar.searchOrAsk' : 'toolbar.search');
 }
 
 wireSidebar();
+wireMcpModal();
 wireSettings();
 refreshFeatureFlags();
 // Default to shown; honor a remembered "hidden" choice, and start hidden on
@@ -1970,3 +2100,6 @@ loadIndex();
 </script>
 </body>
 </html>`;
+}
+
+export const PAGE_HTML = renderPage('zh-CN');

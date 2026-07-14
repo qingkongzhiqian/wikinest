@@ -11,7 +11,9 @@ import {
   tidyAndSet, tidyMarkdown, synthesizeCategory, synthesizeSelection,
   isOrganizeConfigured, isDigest, suggestTitle,
 } from '../core/organize.js';
-import { askWiki, semanticSearch, syncIndex, rebuildIndex, isRagConfigured } from '../core/rag.js';
+import {
+  askWiki, semanticSearch, syncIndex, rebuildIndex, isRagConfigured, isAskConfigured,
+} from '../core/rag.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { renderMarkdown } from '../render.js';
 import {
@@ -24,7 +26,7 @@ import {
   checkCredentials, setSessionCookie, clearSessionCookie, readSession,
 } from './auth.js';
 import { rateLimit } from './ratelimit.js';
-import { PAGE_HTML } from './page.js';
+import { renderPage } from './page.js';
 import { LOGIN_HTML } from './login.js';
 
 // Derive a short plain-text description from a markdown body:
@@ -36,6 +38,13 @@ function deriveDesc(content) {
     return t.replace(/[*_`>#-]/g, '').trim().slice(0, 160);
   }
   return '';
+}
+
+function publicError(err, code) {
+  return {
+    ...(code ? { code } : {}),
+    error: err?.message || String(err || 'Unknown error'),
+  };
 }
 
 export function createApp() {
@@ -54,10 +63,11 @@ export function createApp() {
   );
   app.use(express.json({ limit: '5mb' }));
 
-  // Serve front-end vendor libraries from local node_modules so the app works
-  // fully offline (no CDN). These are public library assets — registered before
-  // the auth guard so they load without a session, and long-cached since they're
-  // versioned by the dependency in package.json.
+  // Serve packaged brand assets and vendor libraries before the auth guard so
+  // the desktop app and login page can load fully offline.
+  const webAssets = path.resolve(fileURLToPath(import.meta.url), '../assets');
+  app.use('/assets', express.static(webAssets, { maxAge: '7d', index: false }));
+
   const nodeModules = path.resolve(fileURLToPath(import.meta.url), '../../../node_modules');
   app.use('/vendor/highlight.js', express.static(path.join(nodeModules, 'highlight.js/styles'), {
     maxAge: '7d', index: false,
@@ -109,7 +119,7 @@ export function createApp() {
       setSessionCookie(req, res, user || 'wiki');
       return res.json({ ok: true });
     }
-    res.status(401).json({ error: '密码错误' });
+    res.status(401).json({ code: 'INVALID_CREDENTIALS', error: 'Invalid credentials' });
   });
   app.post('/logout', (_req, res) => {
     clearSessionCookie(res);
@@ -254,7 +264,10 @@ export function createApp() {
       const r = await tidyAndSet(p);
       res.json({ ok: true, path: r.path, html: renderMarkdown(r.content) });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isOrganizeConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -266,7 +279,10 @@ export function createApp() {
       const tidied = await tidyMarkdown({ title, content });
       res.json({ ok: true, content: tidied });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isOrganizeConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -276,7 +292,10 @@ export function createApp() {
       const title = await suggestTitle({ content: (req.body?.content || '').toString() });
       res.json({ ok: true, title });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isOrganizeConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -287,7 +306,10 @@ export function createApp() {
       const r = await synthesizeCategory(category);
       res.json({ ok: true, ...r });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isOrganizeConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -299,13 +321,16 @@ export function createApp() {
       const r = await synthesizeSelection(paths, { title });
       res.json({ ok: true, ...r });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isOrganizeConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
   // --- RAG: semantic search + "ask your wiki" ---
   app.get('/api/rag/status', (_req, res) => {
-    res.json({ enabled: isRagConfigured() });
+    res.json({ enabled: isAskConfigured() });
   });
 
   // Natural-language question answered from the notes, with source links.
@@ -315,7 +340,13 @@ export function createApp() {
       const r = await askWiki(question);
       res.json({ ok: true, answer: r.answer, html: renderMarkdown(r.answer), sources: r.sources });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      const code = !isRagConfigured()
+        ? 'RAG_NOT_CONFIGURED'
+        : !isAskConfigured() ? 'LLM_NOT_CONFIGURED' : undefined;
+      res.status(400).json(publicError(
+        err,
+        code,
+      ));
     }
   });
 
@@ -332,7 +363,10 @@ export function createApp() {
       }
       res.json([...byPath.values()]);
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isRagConfigured() ? undefined : 'RAG_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -342,7 +376,10 @@ export function createApp() {
       const stats = await rebuildIndex();
       res.json({ ok: true, ...stats });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isRagConfigured() ? undefined : 'RAG_NOT_CONFIGURED',
+      ));
     }
   });
 
@@ -390,14 +427,22 @@ export function createApp() {
       const categories = await classifyAndSet(p);
       res.json({ ok: true, path: p, categories });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(publicError(
+        err,
+        isClassifyConfigured() ? undefined : 'LLM_NOT_CONFIGURED',
+      ));
     }
   });
 
   // Batch-classify. By default only notes that have no categories yet;
   // pass { all: true } to reclassify everything.
   app.post('/api/classify/all', async (req, res) => {
-    if (!isClassifyConfigured()) return res.status(400).json({ error: '自动分类未配置' });
+    if (!isClassifyConfigured()) {
+      return res.status(400).json({
+        code: 'LLM_NOT_CONFIGURED',
+        error: 'Automatic classification is not configured',
+      });
+    }
     const all = req.body?.all === true;
     const concurrency = Math.max(1, Number(process.env.WIKI_CLASSIFY_CONCURRENCY) || 3);
     try {
@@ -440,6 +485,12 @@ export function createApp() {
     uploadLimiter,
     express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
     async (req, res) => {
+      if (!isStorageConfigured()) {
+        return res.status(400).json({
+          code: 'STORAGE_NOT_CONFIGURED',
+          error: 'Image storage is not configured',
+        });
+      }
       try {
         const contentType = req.get('content-type');
         const filename = decodeURIComponent(req.get('x-filename') || 'image');
@@ -453,7 +504,8 @@ export function createApp() {
 
   // --- Frontend (single self-contained page) ---
   app.get('*', (_req, res) => {
-    res.type('html').send(PAGE_HTML);
+    const locale = process.env.WIKINEST_LOCALE || 'zh-CN';
+    res.type('html').send(renderPage(locale));
   });
 
   return app;

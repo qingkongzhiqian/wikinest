@@ -4,9 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootBackend } from './boot.js';
 import { readSettings, writeSettings, syncSettingsToEnv } from './config.js';
+import { desktopLabels, readLocale, writeLocale, syncLocaleToEnv } from './preferences.js';
+import { MESSAGES } from '../src/i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const store = new Store();
+const DESKTOP_PORT = Number(process.env.WIKINEST_DESKTOP_PORT) || 4321;
 
 let settingsWin = null;
 let mainWin = null;
@@ -45,8 +48,9 @@ function switchVault(dir) {
 
 // 弹目录选择框,选中后切换知识库。
 async function openVaultDialog() {
+  const labels = desktopLabels(readLocale(store));
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: '打开知识库文件夹',
+    title: labels.openVaultTitle,
     properties: ['openDirectory', 'createDirectory'],
   });
   if (canceled || !filePaths?.[0]) return;
@@ -57,8 +61,9 @@ async function openVaultDialog() {
 async function resolveVaultDir() {
   const saved = store.get('vaultDir');
   if (saved) { rememberVault(saved); return saved; }
+  const labels = desktopLabels(readLocale(store));
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: '选择一个文件夹作为你的知识库(Vault)',
+    title: labels.chooseVaultTitle,
     properties: ['openDirectory', 'createDirectory'],
   });
   if (canceled || !filePaths?.[0]) return null;
@@ -69,9 +74,10 @@ async function resolveVaultDir() {
 
 // 「打开最近」子菜单:列出除当前库外的最近知识库,点击即切换。
 function recentVaultsSubmenu() {
+  const labels = desktopLabels(readLocale(store));
   const current = store.get('vaultDir');
   const recent = (store.get('recentVaults') || []).filter((d) => d && d !== current);
-  if (!recent.length) return [{ label: '(暂无)', enabled: false }];
+  if (!recent.length) return [{ label: labels.noRecent, enabled: false }];
   const items = recent.map((dir) => ({
     label: path.basename(dir),
     toolTip: dir,
@@ -79,7 +85,7 @@ function recentVaultsSubmenu() {
   }));
   items.push({ type: 'separator' });
   items.push({
-    label: '清除最近记录',
+    label: labels.clearRecent,
     click: () => {
       store.set('recentVaults', current ? [current] : []);
       buildMenu();
@@ -94,10 +100,11 @@ function openSettings() {
     settingsWin.focus();
     return;
   }
+  const labels = desktopLabels(readLocale(store));
   settingsWin = new BrowserWindow({
     width: 640,
     height: 720,
-    title: '设置',
+    title: labels.settingsTitle,
     resizable: true,
     minimizable: false,
     maximizable: false,
@@ -116,13 +123,14 @@ function openSettings() {
 // 应用菜单:提供「设置…」入口(Cmd/Ctrl+,)并保留常用编辑/视图快捷键。
 function buildMenu() {
   const isMac = process.platform === 'darwin';
+  const labels = desktopLabels(readLocale(store));
   const template = [
     ...(isMac ? [{
       label: app.name,
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettingsInApp },
+        { label: labels.settings, accelerator: 'CmdOrCtrl+,', click: openSettingsInApp },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -132,17 +140,17 @@ function buildMenu() {
       ],
     }] : []),
     {
-      label: '文件',
+      label: labels.file,
       submenu: [
-        { label: '打开文件夹…', accelerator: 'CmdOrCtrl+O', click: openVaultDialog },
-        { label: '打开最近', submenu: recentVaultsSubmenu() },
+        { label: labels.openFolder, accelerator: 'CmdOrCtrl+O', click: openVaultDialog },
+        { label: labels.openRecent, submenu: recentVaultsSubmenu() },
         { type: 'separator' },
-        ...(isMac ? [] : [{ label: '设置…', accelerator: 'CmdOrCtrl+,', click: openSettingsInApp }, { type: 'separator' }]),
+        ...(isMac ? [] : [{ label: labels.settings, accelerator: 'CmdOrCtrl+,', click: openSettingsInApp }, { type: 'separator' }]),
         isMac ? { role: 'close' } : { role: 'quit' },
       ],
     },
     {
-      label: '编辑',
+      label: labels.edit,
       submenu: [
         { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
         { role: 'cut' }, { role: 'copy' }, { role: 'paste' },
@@ -150,9 +158,10 @@ function buildMenu() {
       ],
     },
     {
-      label: '视图',
+      label: labels.view,
       submenu: [
-        { role: 'reload' }, { role: 'forceReload' }, { type: 'separator' },
+        { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+        { type: 'separator' },
         { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
         { type: 'separator' }, { role: 'togglefullscreen' },
       ],
@@ -167,13 +176,17 @@ async function createWindow() {
   if (!vaultDir) { app.quit(); return; }
 
   const settings = readSettings(store);
-  const { port } = await bootBackend({ vaultDir, settings });
+  syncLocaleToEnv(readLocale(store));
+  const { port } = await bootBackend({ vaultDir, settings, port: DESKTOP_PORT });
 
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     title: `Wikinest — ${path.basename(vaultDir)}`,
-    titleBarStyle: 'hiddenInset', // Mac 上更贴合原生;其它平台自动回退
+    // Keep native macOS traffic lights but let the web page render the rest of
+    // the titlebar (drag region + sidebar toggle).
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 16, y: 14 },
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -201,9 +214,14 @@ ipcMain.handle('settings:get', () => readSettings(store));
 ipcMain.handle('settings:info', () => ({
   vaultDir: store.get('vaultDir') || '',
   version: app.getVersion(),
+  locale: readLocale(store),
+  messages: MESSAGES[readLocale(store)],
 }));
 ipcMain.handle('settings:save', async (_e, data) => {
+  const previousLocale = readLocale(store);
   const clean = writeSettings(store, data);
+  const locale = writeLocale(store, data?.locale ?? previousLocale);
+  syncLocaleToEnv(locale);
   // 热更新,无需重启:后端 express 就跑在本进程里,LLM / Embedding 每次请求都
   // 实时读 process.env,所以刷新 env 即可立即生效;更换 env 后再重置 S3 客户端
   // 单例,让存储配置也生效。(更换知识库走 chooseVault,那条路径才需要重启。)
@@ -214,9 +232,13 @@ ipcMain.handle('settings:save', async (_e, data) => {
   } catch (err) {
     console.error('reset storage client failed:', err.message);
   }
+  const localeChanged = locale !== previousLocale;
+  if (localeChanged) buildMenu();
   // 通知前端重新拉取各能力状态,刷新按钮/入口的显隐。
-  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('settings-updated');
-  return { ok: true };
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('settings-updated', { localeChanged });
+  }
+  return { ok: true, localeChanged };
 });
 ipcMain.handle('settings:close', () => {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
@@ -228,6 +250,7 @@ ipcMain.handle('settings:chooseVault', async () => {
 });
 
 app.whenReady().then(() => {
+  syncLocaleToEnv(readLocale(store));
   buildMenu();
   createWindow();
 });

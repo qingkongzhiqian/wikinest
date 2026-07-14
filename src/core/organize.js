@@ -8,6 +8,12 @@ import {
   nextAvailablePath,
 } from './store.js';
 import { chat, isLLMConfigured, stripCodeFence } from './llm.js';
+import {
+  SINGLE_SOURCE_LANGUAGE_RULE,
+  MULTI_SOURCE_LANGUAGE_RULE,
+  isHanDocumentMajority,
+  referenceHeadingForDocuments,
+} from './prompts.js';
 
 // 综述文章统一存放目录;这些文件不参与分类计数,也不出现在普通列表里。
 export const DIGEST_DIR = 'digests';
@@ -52,13 +58,13 @@ export async function tidyMarkdown({ title = '', content = '' }) {
   const clipped = body.slice(0, MAX_TIDY_CHARS);
 
   const system =
-    '你是一个中文排版整理助手。把用户丢进来的原始文本整理成排版规范、结构清晰的 Markdown。' +
-    '规则:1) 只整理格式,严禁增删或改写事实、观点、数据;' +
-    '2) 合理分段,按语义补充标题层级(##/###),把并列项改成列表,代码/命令用代码块;' +
-    '3) 修正明显的错别字、标点、多余空行等排版问题;' +
-    '4) 保留原文语言与语气;5) 不要加入你自己的评论、总结或前后缀。' +
-    '直接输出整理后的 Markdown 正文,不要用 ``` 包裹整篇。';
-  const user = `标题:${title || '(无)'}\n\n原始内容:\n${clipped}`;
+    'Format the raw text as clean, well-structured Markdown. ' +
+    'Only improve formatting: do not add, remove, or rewrite facts, opinions, or data. ' +
+    'Use semantic paragraphs and headings (##/###), lists for parallel items, and fenced blocks for code or commands. ' +
+    'Fix obvious typos, punctuation, and excess blank lines while preserving the original tone. ' +
+    SINGLE_SOURCE_LANGUAGE_RULE + ' ' +
+    'Return only the Markdown body without wrapping the entire response in a code fence.';
+  const user = `Title: ${title || '(none)'}\n\nRaw content:\n${clipped}`;
 
   const text = await chat(
     [
@@ -82,8 +88,10 @@ export async function suggestTitle({ content = '' }) {
   const body = (content || '').trim().slice(0, 4000);
   if (!body) return '';
   const system =
-    '你是一个中文起标题助手。根据笔记内容,给出一个简洁、准确、能概括主题的标题。' +
-    '要求:6~20 个字;不要书名号、引号或结尾标点;不要输出解释或多余内容,只返回标题本身。';
+    'Create a concise, accurate title that summarizes the note. ' +
+    SINGLE_SOURCE_LANGUAGE_RULE + ' ' +
+    'Aim for 6 to 20 Chinese characters or 3 to 12 words in space-delimited languages. ' +
+    'Do not use quotation marks or terminal punctuation. Return only the title with no explanation.';
   const text = await chat(
     [
       { role: 'system', content: system },
@@ -149,22 +157,20 @@ async function buildDigestArticle(members, { subject = '' } = {}) {
   let acc = '';
   for (const m of members) {
     const n = included.length + 1;
-    const piece = `\n\n### 来源[${n}]:${m.title}${m.date ? `(${m.date.slice(0, 10)})` : ''}\n${(m.content || '').trim().slice(0, MAX_PER_NOTE_CHARS)}`;
+    const piece = `\n\n### Source [${n}]: ${m.title}${m.date ? ` (${m.date.slice(0, 10)})` : ''}\n${(m.content || '').trim().slice(0, MAX_PER_NOTE_CHARS)}`;
     if (acc.length + piece.length > MAX_DIGEST_CHARS) break;
     acc += piece;
     included.push(m);
   }
 
   const system =
-    '你是一位知识整理编辑。下面是用户挑选出的多篇零散笔记,' +
-    '每篇都带一个编号(如「来源[2]」)。' +
-    '请把它们提炼、去重、按子主题重新组织,写成一篇结构清晰、连贯可读的中文综述文章。' +
-    '要求:1) 开头用一级标题(# )给出文章标题;2) 用 ## 分子主题,合并重复内容;' +
-    '3) 忠于原始笔记,严禁编造原文没有的事实;4) 可用列表、要点让结构清楚;' +
-    '5) 结尾可有一小段「小结」;' +
-    '6) 在引用了某篇来源内容的句子末尾,用 [[N]] 标注它的来源编号(N 是上面的编号,可多个如 [[1]][[3]]),不要写「参考来源」清单,清单会自动生成。' +
-    '直接输出 Markdown,不要用 ``` 包裹整篇。';
-  const user = `${subject}\n共 ${members.length} 篇笔记(实际纳入 ${included.length} 篇)。\n${acc}`;
+    'You are a knowledge editor. Synthesize the numbered source notes into one clear, coherent article. ' +
+    'Deduplicate ideas and reorganize them by subtopic. Start with an H1 title and use H2 sections. ' +
+    'Stay faithful to the notes and never invent unsupported facts. Lists are welcome when they improve clarity. ' +
+    MULTI_SOURCE_LANGUAGE_RULE + ' ' +
+    'Add [[N]] after claims that use source N; multiple citations such as [[1]][[3]] are allowed. ' +
+    'Do not create a sources section because it is appended automatically. Return only Markdown without an outer code fence.';
+  const user = `${subject}\nSource notes: ${members.length}; included: ${included.length}.\n${acc}`;
 
   const text = await chat(
     [
@@ -188,7 +194,7 @@ async function buildDigestArticle(members, { subject = '' } = {}) {
     const list = included
       .map((m, i) => `${i + 1}. [${m.title}](${noteLink(m.path)})`)
       .join('\n');
-    article += `\n\n## 参考来源\n\n${list}\n`;
+    article += `\n\n## ${referenceHeadingForDocuments(included.map((m) => m.content), acc)}\n\n${list}\n`;
   }
   return { article, included };
 }
@@ -207,11 +213,13 @@ export async function synthesizeCategory(category) {
   const members = await collectCategoryNotes(cat);
   if (!members.length) throw new Error(`分类「${cat}」下没有笔记`);
 
-  const { article, included } = await buildDigestArticle(members, { subject: `分类:${cat}` });
+  const { article, included } = await buildDigestArticle(members, { subject: `Category: ${cat}` });
 
   const path = digestPathFor(cat);
   const frontmatter = {
-    title: `「${cat}」综述`,
+    title: isHanDocumentMajority(members.map((m) => m.content), cat)
+      ? `「${cat}」综述`
+      : `${cat} Digest`,
     digest: true,
     category: cat,
     generatedAt: new Date().toISOString(),
@@ -256,7 +264,7 @@ export async function synthesizeSelection(paths, { title = '' } = {}) {
   if (members.length < 2) throw new Error('有效笔记不足 2 篇');
 
   const { article, included } = await buildDigestArticle(members, {
-    subject: '主题:以下是用户手动挑选、希望合成为一篇的若干笔记',
+    subject: 'Topic: the user selected these notes to synthesize into one article.',
   });
 
   // Title: caller-provided → AI-suggested from the article → date fallback.
@@ -264,7 +272,12 @@ export async function synthesizeSelection(paths, { title = '' } = {}) {
   if (!finalTitle) {
     try { finalTitle = await suggestTitle({ content: article }); } catch { /* ignore */ }
   }
-  if (!finalTitle) finalTitle = '自选综述 · ' + new Date().toISOString().slice(0, 10);
+  if (!finalTitle) {
+    const date = new Date().toISOString().slice(0, 10);
+    finalTitle = isHanDocumentMajority(members.map((m) => m.content), article)
+      ? `自选综述 · ${date}`
+      : `Custom Digest · ${date}`;
+  }
 
   // Inherit the source notes' categories so the synthesis is filed alongside them.
   const categories = [...catSet];

@@ -5,7 +5,7 @@
   "type": "module",
   "main": "desktop/main.js",
   "license": "MIT",
-  "author": "WiseFuturus <wisefuturus@163.com>",
+  "author": "Wise Future Innovations Limited",
   "homepage": "https://github.com/qingkongzhiqian/wikinest#readme",
   "repository": {
     "type": "git",
@@ -57,9 +57,9 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "app.wikinest",
+    "appId": "com.wisefuturus.wikinest",
     "productName": "Wikinest",
-    "copyright": "Copyright © 2026 WiseFuturus",
+    "copyright": "Copyright © 2026 Wise Future Innovations Limited",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -73,6 +73,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
+      "identity": "Developer ID Application: Wise Future Innovations Limited (A944X443QS)",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",

@@ -13,7 +13,13 @@ import { isDigest } from './organize.js';
 import {
   embedTexts, embedOne, dot, isEmbedConfigured, embedConfig,
 } from './embed.js';
-import { chat, stripCodeFence } from './llm.js';
+import { chat, isLLMConfigured, stripCodeFence } from './llm.js';
+import {
+  QA_LANGUAGE_RULE,
+  noResultsMessageFor,
+  noModelOutputMessageForDocuments,
+  referenceHeadingForDocuments,
+} from './prompts.js';
 
 const INDEX_DIR = path.join(CONTENT_DIR, '.index');
 const INDEX_FILE = path.join(INDEX_DIR, 'embeddings.json');
@@ -24,6 +30,10 @@ const LONG_TIMEOUT_MS = Number(process.env.LLM_LONG_TIMEOUT_MS) || 90_000;
 
 export function isRagConfigured() {
   return isEmbedConfigured();
+}
+
+export function isAskConfigured() {
+  return isEmbedConfigured() && isLLMConfigured();
 }
 
 // Split a note body into reasonably-sized chunks on paragraph boundaries.
@@ -176,20 +186,28 @@ export async function askWiki(question, { k = 6 } = {}) {
 
   const hits = await semanticSearch(q, k);
   if (!hits.length) {
-    return { answer: '知识库里暂时没有找到相关内容。换个说法,或先多记录一些笔记再试。', sources: [], hitCount: 0 };
+    return { answer: noResultsMessageFor(q), sources: [], hitCount: 0 };
   }
 
   const context = hits
     .map((h, i) => `【${i + 1}】《${h.title}》\n${h.text}`)
     .join('\n\n');
+  const documentsByPath = new Map();
+  for (const hit of hits) {
+    documentsByPath.set(
+      hit.path,
+      `${documentsByPath.get(hit.path) || ''}\n${hit.text}`,
+    );
+  }
+  const sourceDocuments = [...documentsByPath.values()];
 
   const system =
-    '你是用户私人知识库的问答助手。只依据下面提供的「资料片段」回答问题,' +
-    '严禁编造资料中没有的信息;若资料不足以回答,就如实说明「知识库里没有相关内容」。' +
-    '用中文,简洁、有条理地回答。' +
-    '在引用了某段资料的句子末尾,用 [[N]] 标注片段编号(N 是【】里的数字,可多个如 [[1]][[3]]),' +
-    '不要自己写「参考来源」清单,清单会自动生成。直接输出回答,不要用 ``` 包裹。';
-  const user = `问题:${q}\n\n资料片段:\n${context}`;
+    'Answer the question using only the provided source excerpts. Never invent information that is absent from them. ' +
+    'If the excerpts are insufficient, state that the knowledge base does not contain enough relevant information. ' +
+    'Be concise and well organized. ' + QA_LANGUAGE_RULE + ' ' +
+    'Add [[N]] after statements supported by excerpt N; multiple citations such as [[1]][[3]] are allowed. ' +
+    'Do not create a sources section because it is appended automatically. Return only the answer without an outer code fence.';
+  const user = `Question: ${q}\n\nSource excerpts:\n${context}`;
 
   const text = await chat(
     [
@@ -198,7 +216,7 @@ export async function askWiki(question, { k = 6 } = {}) {
     ],
     { temperature: 0.3, timeoutMs: LONG_TIMEOUT_MS },
   );
-  let answer = stripCodeFence(text) || '（模型没有返回内容）';
+  let answer = stripCodeFence(text) || noModelOutputMessageForDocuments(sourceDocuments, q);
 
   // Map [[N]] citations to in-app links back to the cited chunk's note.
   answer = answer.replace(/\[\[(\d+)\]\]/g, (m, d) => {
@@ -215,7 +233,7 @@ export async function askWiki(question, { k = 6 } = {}) {
     sources.push({ path: h.path, title: h.title });
   }
   const list = sources.map((s, i) => `${i + 1}. [${s.title}](${noteLink(s.path)})`).join('\n');
-  answer += `\n\n## 参考来源\n\n${list}\n`;
+  answer += `\n\n## ${referenceHeadingForDocuments(sourceDocuments, q)}\n\n${list}\n`;
 
   return { answer, sources, hitCount: hits.length };
 }

@@ -1,7 +1,7 @@
 import { applySettingsToEnv } from './config.js';
 
 // 在导入后端之前设置 WIKI_CONTENT_DIR —— store.js 在模块加载时读取它。
-export async function bootBackend({ vaultDir, settings = {} }) {
+export async function bootBackend({ vaultDir, settings = {}, port = 0 }) {
   if (!vaultDir || typeof vaultDir !== 'string') {
     throw new Error('vaultDir is required');
   }
@@ -14,6 +14,6 @@ export async function bootBackend({ vaultDir, settings = {} }) {
   applySettingsToEnv(settings);
   // 动态 import 确保上面的 env 已生效后才加载后端。
   const { startServer } = await import('../src/web/server.js');
-  const server = await startServer({ port: 0, host: '127.0.0.1' });
+  const server = await startServer({ port, host: '127.0.0.1' });
   return { server, port: server.address().port };
 }
