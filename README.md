@@ -106,17 +106,18 @@ Your knowledge is still stored as ordinary `.md` files in a folder you choose. T
 
 > No API key is required to use Wikinest as a fast local Markdown wiki. AI features appear when you configure a compatible model.
 
-## Start with the desktop app
+## Download the desktop app
 
-Download the latest build from [GitHub Releases](https://github.com/qingkongzhiqian/wikinest/releases).
+The latest release is [Wikinest 1.0.0](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.0.0) for macOS. Choose the installer that matches your Mac:
 
-| Platform | Package |
+| Mac | Download |
 | --- | --- |
-| macOS — Apple Silicon and Intel | `.dmg` |
-| Windows | `.exe` installer |
-| Linux | `.AppImage` / `.deb` |
+| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.0/Wikinest-1.0.0-arm64.dmg) |
+| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.0/Wikinest-1.0.0.dmg) |
 
-On first launch, choose a folder as your Vault. Wikinest remembers it and lets you switch Vaults later through **File → Open Folder…** or **Open Recent**.
+Both installers are signed with the Developer ID of Wise Future Innovations Limited and notarized by Apple.
+
+Open the downloaded DMG, drag Wikinest into **Applications**, and launch it. On first launch, choose a folder as your Vault. Wikinest remembers it and lets you switch Vaults later through **File → Open Folder…** or **Open Recent**.
 
 Configure language, models, embeddings, image storage, and your local MCP connection from **Settings**.
 
