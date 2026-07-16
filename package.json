@@ -1,6 +1,6 @@
 {
   "name": "wikinest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Wikinest — a local-first desktop app for your markdown personal wiki, with AI auto-organizing, MCP and RAG",
   "type": "module",
   "main": "desktop/main.js",
@@ -80,13 +80,24 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true,
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "win": {
       "icon": "build/icon.png",
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -96,7 +107,10 @@
     "linux": {
       "icon": "build/icon.png",
       "category": "Utility",
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     }
   }
 }

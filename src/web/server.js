@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   listTree, readNote, writeNote, deleteNote, searchNotes, noteExists,
-  CONTENT_DIR, getAllNotes, nextAvailablePath, moveNote,
+  CONTENT_DIR, getAllNotes, nextAvailablePath, moveNote, updateFrontmatter,
   normalizeCategoryList, setNoteCategories, listCategories, renameCategory, deleteCategory,
 } from '../core/store.js';
 import { classifyAndSet, autoTagIfEmpty, isClassifyConfigured } from '../core/classify.js';
@@ -215,7 +215,12 @@ export function createApp() {
       if (!from || !to) return res.status(400).json({ error: 'from/to required' });
       if (!(await noteExists(from))) return res.status(404).json({ error: 'not found' });
       const saved = await moveNote(from, to);
-      res.json({ ok: true, path: saved });
+      // The UI shows the frontmatter `title`, not the filename, so a path-only
+      // rename would leave the visible name unchanged. Keep the title in sync
+      // with the new leaf filename so renaming updates both.
+      const title = saved.split('/').pop().replace(/\.md$/i, '');
+      if (title) await updateFrontmatter(saved, { title });
+      res.json({ ok: true, path: saved, title });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }

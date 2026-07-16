@@ -1405,6 +1405,67 @@ function toast(msg, ms = 1800) {
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
+// Electron's renderer does not implement window.prompt(): calling it is a no-op
+// that returns null, so rename / add-category flows silently do nothing in the
+// desktop app. This in-page dialog is the drop-in replacement (resolves to the
+// entered string, or null when cancelled) and works in the browser too.
+function promptDialog(message, defaultValue = '') {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'set-overlay show';
+    overlay.style.alignItems = 'center';
+    const box = document.createElement('div');
+    box.style.cssText = 'width:100%;max-width:420px;background:var(--bg);color:var(--fg);'
+      + 'border:1px solid var(--faint);border-radius:14px;padding:20px;'
+      + 'box-shadow:0 24px 60px rgba(0,0,0,.28);font-family:var(--sans);';
+    const label = document.createElement('div');
+    label.textContent = message;
+    label.style.cssText = 'font-size:14px;line-height:1.4;margin-bottom:12px;white-space:pre-wrap;';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = defaultValue;
+    input.style.cssText = 'width:100%;font-size:14px;padding:9px 11px;border:1px solid var(--faint);'
+      + 'border-radius:9px;background:#fff;color:var(--fg);outline:none;font-family:var(--sans);';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;margin-top:16px;';
+    const cancel = document.createElement('button');
+    cancel.textContent = tr('app.cancel');
+    cancel.style.cssText = 'padding:8px 16px;border-radius:9px;border:1px solid var(--faint);'
+      + 'background:var(--bg);color:var(--fg);font-size:13.5px;cursor:pointer;';
+    const ok = document.createElement('button');
+    ok.textContent = tr('app.save');
+    ok.style.cssText = 'padding:8px 16px;border-radius:9px;border:1px solid var(--fg);'
+      + 'background:var(--fg);color:#fff;font-size:13.5px;cursor:pointer;';
+
+    let done = false;
+    const close = (val) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(null); }
+      else if (e.key === 'Enter') { e.preventDefault(); close(input.value); }
+    };
+    cancel.onclick = () => close(null);
+    ok.onclick = () => close(input.value);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+    document.addEventListener('keydown', onKey);
+
+    row.appendChild(cancel);
+    row.appendChild(ok);
+    box.appendChild(label);
+    box.appendChild(input);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    input.focus();
+    input.select();
+  });
+}
+
 // Lazily load mermaid (a ~3MB module) only the first time a diagram actually
 // needs rendering. Most notes have none, so this keeps startup fast. Served
 // locally from /vendor (bundled in node_modules) so it works fully offline.
@@ -1627,7 +1688,7 @@ $('previewToggle').onclick = () => {
 $('renameBtn').onclick = async () => {
   if (!current) return;
   const cur = current.replace(/\\.md$/, '');
-  const to = prompt(tr('rename.prompt'), cur);
+  const to = await promptDialog(tr('rename.prompt'), cur);
   if (!to || !to.trim() || to.trim() === cur) return;
   try {
     const r = await api('/api/note/rename', {
@@ -1724,8 +1785,8 @@ function renderCats(catsRaw) {
   });
   const add = document.createElement('button');
   add.className = 'cat-add'; add.textContent = tr('categories.add');
-  add.onclick = () => {
-    const name = prompt(tr('categories.addPrompt'));
+  add.onclick = async () => {
+    const name = await promptDialog(tr('categories.addPrompt'));
     if (name && name.trim()) setCurrentCats([...new Set([...cats, name.trim()])]);
   };
   el.appendChild(add);
@@ -1748,7 +1809,7 @@ async function setCurrentCats(cats) {
 }
 
 async function renameCat(oldName) {
-  const to = prompt(tr('categories.renamePrompt', { name: oldName }), oldName);
+  const to = await promptDialog(tr('categories.renamePrompt', { name: oldName }), oldName);
   if (!to || !to.trim() || to.trim() === oldName) return;
   await api('/api/categories/rename', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
