@@ -108,14 +108,14 @@ Your knowledge is still stored as ordinary `.md` files in a folder you choose. T
 
 ## Download the desktop app
 
-The latest release is [Wikinest 1.0.0](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.0.0) for macOS. Choose the installer that matches your Mac:
+The latest release is [Wikinest 1.0.1](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.0.1) for macOS. Choose the installer that matches your Mac:
 
 | Mac | Download |
 | --- | --- |
-| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.0/Wikinest-1.0.0-arm64.dmg) |
-| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.0/Wikinest-1.0.0.dmg) |
+| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1-arm64.dmg) |
+| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1.dmg) |
 
-Both installers are signed with the Developer ID of Wise Future Innovations Limited and notarized by Apple.
+Both installers are signed with the Developer ID of Wise Future Innovations Limited. This build is not notarized yet, so on first launch right-click the app and choose **Open** (or allow it under **System Settings → Privacy & Security**).
 
 Open the downloaded DMG, drag Wikinest into **Applications**, and launch it. On first launch, choose a folder as your Vault. Wikinest remembers it and lets you switch Vaults later through **File → Open Folder…** or **Open Recent**.
 
