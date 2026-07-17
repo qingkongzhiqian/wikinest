@@ -14,6 +14,12 @@
   </p>
 </div>
 
+<div align="center">
+  <img src="docs/screenshots/all-notes.png" alt="Wikinest — rough captures tidied into clean Markdown and auto-filed into reusable categories" width="860" />
+  <br /><br />
+  <img src="docs/screenshots/article.png" alt="Wikinest — article view with rendered Markdown, code and Mermaid diagrams" width="860" />
+</div>
+
 ---
 
 ## You saved it. Then you lost it.
