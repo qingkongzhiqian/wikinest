@@ -14,6 +14,12 @@
   </p>
 </div>
 
+<div align="center">
+  <img src="docs/screenshots/all-notes.png" alt="Wikinest —— 随手记录被整理成整洁的 Markdown，并自动归入可复用的分类" width="860" />
+  <br /><br />
+  <img src="docs/screenshots/article.png" alt="Wikinest —— 文章视图，渲染 Markdown、代码与 Mermaid 图表" width="860" />
+</div>
+
 ---
 
 ## 你明明保存了，后来却再也找不到
