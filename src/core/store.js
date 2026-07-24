@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,149 @@ export function toRelPath(abs) {
 
 async function ensureContentDir() {
   await fs.mkdir(CONTENT_DIR, { recursive: true });
+}
+
+// Tail promises serialize mutations to one absolute path while leaving
+// unrelated paths independent. Multi-path callers acquire in sorted order.
+const _pathLockTails = new Map();
+const _pathGenerations = new Map();
+const _noteReadGenerations = new WeakMap();
+let _tempSequence = 0;
+let _mutationObserver = null;
+
+// APFS/HFS+ and Windows commonly identify NFC/case aliases as one file. Use a
+// conservative identity everywhere so aliases cannot bypass locks or cache
+// generations even when tests run on a case-sensitive filesystem.
+function pathIdentity(abs) {
+  return abs.normalize('NFC').toLowerCase();
+}
+
+function pathGeneration(abs) {
+  return _pathGenerations.get(pathIdentity(abs)) || 0;
+}
+
+async function acquirePathLock(key) {
+  const previous = _pathLockTails.get(key) || Promise.resolve();
+  let releaseGate;
+  const gate = new Promise((resolve) => { releaseGate = resolve; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  _pathLockTails.set(key, tail);
+  await previous.catch(() => {});
+  return () => {
+    releaseGate();
+    if (_pathLockTails.get(key) === tail) _pathLockTails.delete(key);
+  };
+}
+
+async function withPathLocks(paths, operation) {
+  const releases = [];
+  const ordered = [...new Set(paths.map(pathIdentity))].sort();
+  try {
+    for (const key of ordered) releases.push(await acquirePathLock(key));
+    return await operation();
+  } finally {
+    for (let i = releases.length - 1; i >= 0; i--) releases[i]();
+  }
+}
+
+async function atomicWriteFile(abs, raw, beforeRename) {
+  const dir = path.dirname(abs);
+  await fs.mkdir(dir, { recursive: true });
+  const temp = path.join(
+    dir,
+    `.${path.basename(abs)}.${process.pid}.${++_tempSequence}.tmp`,
+  );
+  try {
+    await fs.writeFile(temp, raw);
+    await beforeRename?.();
+    await fs.rename(temp, abs);
+  } catch (error) {
+    try {
+      await fs.unlink(temp);
+    } catch (cleanupError) {
+      if (cleanupError.code !== 'ENOENT') {
+        throw new AggregateError(
+          [error, cleanupError],
+          `atomic write failed: ${error.message}; temp cleanup failed: ${cleanupError.message}`,
+          { cause: error },
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+function invalidateNoteCaches(...absolutePaths) {
+  const identities = new Set(absolutePaths.map(pathIdentity));
+  for (const identity of identities) {
+    _pathGenerations.set(identity, (_pathGenerations.get(identity) || 0) + 1);
+  }
+  for (const rel of _noteCache.keys()) {
+    if (identities.has(pathIdentity(resolveNotePath(rel)))) _noteCache.delete(rel);
+  }
+  for (const rel of _searchCache.keys()) {
+    if (identities.has(pathIdentity(resolveNotePath(rel)))) _searchCache.delete(rel);
+  }
+}
+
+function notifyMutation(event) {
+  if (!_mutationObserver) return;
+  try {
+    Promise.resolve(_mutationObserver(event)).catch(() => {});
+  } catch {
+    // A write is already durable; observer failures must not change its result.
+  }
+}
+
+async function currentContentHash(abs) {
+  try {
+    return createHash('sha256').update(await fs.readFile(abs)).digest('hex');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+export function noteVersion(raw) {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+async function readRawOrEmpty(abs) {
+  try {
+    return await fs.readFile(abs);
+  } catch (error) {
+    if (error.code === 'ENOENT') return Buffer.alloc(0);
+    throw error;
+  }
+}
+
+function versionConflict(currentRaw) {
+  const error = new Error('note changed externally');
+  error.code = 'NOTE_VERSION_CONFLICT';
+  error.currentVersion = noteVersion(currentRaw);
+  return error;
+}
+
+function assertExpectedContentHash(actual, options) {
+  if (!Object.hasOwn(options ?? {}, 'expectedContentHash')) return;
+  if (actual === options.expectedContentHash) return;
+  const error = new Error('local note changed during sync materialization');
+  error.code = 'LOCAL_CHANGED_DURING_SYNC';
+  throw error;
+}
+
+/**
+ * Register the one local-mutation observer. A later registration replaces the
+ * previous observer. Returns an idempotent unregister function.
+ */
+export function setMutationObserver(observer) {
+  if (observer !== null && typeof observer !== 'function') {
+    throw new TypeError('mutation observer must be a function or null');
+  }
+  _mutationObserver = observer;
+  return () => {
+    if (_mutationObserver === observer) _mutationObserver = null;
+  };
 }
 
 /** Recursively list all notes as a nested tree of folders and files. */
@@ -84,6 +228,21 @@ export async function readNote(relPath) {
   return { path: toRelPath(abs), data, content, raw };
 }
 
+/** Read and parse a note with a version from the exact bytes just read. */
+export async function readNoteVersioned(relPath) {
+  const abs = resolveNotePath(relPath);
+  const bytes = await fs.readFile(abs);
+  const raw = bytes.toString('utf8');
+  const { data, content } = matter(raw);
+  return {
+    path: toRelPath(abs),
+    data,
+    content,
+    raw,
+    version: noteVersion(bytes),
+  };
+}
+
 export async function noteExists(relPath) {
   try {
     await fs.access(resolveNotePath(relPath));
@@ -106,6 +265,7 @@ export async function getAllNotes() {
   const out = [];
   for (const p of paths) {
     const abs = resolveNotePath(p);
+    const generation = pathGeneration(abs);
     let mtimeMs = 0;
     try { mtimeMs = (await fs.stat(abs)).mtimeMs; } catch { continue; }
     let e = _noteCache.get(p);
@@ -113,9 +273,13 @@ export async function getAllNotes() {
       const raw = await fs.readFile(abs, 'utf8');
       const { data, content } = matter(raw);
       e = { mtimeMs, data, content };
-      _noteCache.set(p, e);
+      if (pathGeneration(abs) === generation) _noteCache.set(p, e);
     }
-    out.push({ path: p, data: e.data, content: e.content, mtimeMs });
+    const note = {
+      path: p, data: e.data, content: e.content, mtimeMs,
+    };
+    _noteReadGenerations.set(note, generation);
+    out.push(note);
   }
   // Drop cache entries for notes that no longer exist.
   const alive = new Set(paths);
@@ -129,29 +293,96 @@ export async function getAllNotes() {
  */
 export async function writeNote(relPath, body, { frontmatter = {}, mode = 'overwrite' } = {}) {
   const abs = resolveNotePath(relPath);
-  await fs.mkdir(path.dirname(abs), { recursive: true });
+  const rel = toRelPath(abs);
+  await withPathLocks([abs], async () => {
+    let exists = true;
+    try { await fs.access(abs); } catch { exists = false; }
+    if (mode === 'skip' && exists) {
+      throw new Error(`note already exists: ${rel}`);
+    }
 
-  const exists = await noteExists(relPath);
-  if (mode === 'skip' && exists) {
-    throw new Error(`note already exists: ${toRelPath(abs)}`);
-  }
+    let raw;
+    if (mode === 'append' && exists) {
+      const current = await fs.readFile(abs, 'utf8');
+      const parsed = matter(current);
+      const mergedData = { ...parsed.data, ...frontmatter };
+      const newBody = parsed.content.replace(/\s+$/, '') + '\n\n' + body.trim() + '\n';
+      raw = matter.stringify(newBody, mergedData);
+    } else {
+      raw = matter.stringify('\n' + body.trim() + '\n', frontmatter);
+    }
+    await atomicWriteFile(abs, raw);
+    invalidateNoteCaches(abs);
+  });
+  notifyMutation({ type: 'upsert', path: rel, origin: 'local' });
+  return rel;
+}
 
-  if (mode === 'append' && exists) {
-    const current = await fs.readFile(abs, 'utf8');
-    const parsed = matter(current);
-    const mergedData = { ...parsed.data, ...frontmatter };
-    const newBody = parsed.content.replace(/\s+$/, '') + '\n\n' + body.trim() + '\n';
-    await fs.writeFile(abs, matter.stringify(newBody, mergedData));
-  } else {
-    await fs.writeFile(abs, matter.stringify('\n' + body.trim() + '\n', frontmatter));
-  }
-  return toRelPath(abs);
+/**
+ * Atomically overwrite a note only when its exact current bytes match the
+ * caller's version. Both checks run under the target path's mutation lock.
+ */
+export async function writeNoteVersioned(relPath, body, { frontmatter = {}, baseVersion } = {}) {
+  const abs = resolveNotePath(relPath);
+  const rel = toRelPath(abs);
+  let writtenRaw;
+
+  await withPathLocks([abs], async () => {
+    const currentRaw = await readRawOrEmpty(abs);
+    if (noteVersion(currentRaw) !== baseVersion) throw versionConflict(currentRaw);
+
+    writtenRaw = matter.stringify('\n' + body.trim() + '\n', frontmatter);
+    await atomicWriteFile(abs, writtenRaw, async () => {
+      const beforeRename = await readRawOrEmpty(abs);
+      if (noteVersion(beforeRename) !== baseVersion) throw versionConflict(beforeRename);
+    });
+    invalidateNoteCaches(abs);
+  });
+  notifyMutation({ type: 'upsert', path: rel, origin: 'local' });
+  return { path: rel, version: noteVersion(writtenRaw) };
 }
 
 export async function deleteNote(relPath) {
   const abs = resolveNotePath(relPath);
-  await fs.unlink(abs);
-  return toRelPath(abs);
+  const rel = toRelPath(abs);
+  await withPathLocks([abs], async () => {
+    await fs.unlink(abs);
+    invalidateNoteCaches(abs);
+  });
+  notifyMutation({ type: 'delete', path: rel, origin: 'local' });
+  return rel;
+}
+
+/** Apply raw Markdown received from sync without creating a local mutation. */
+export async function applyRawNote(relPath, raw, options = {}) {
+  if (typeof raw !== 'string' && !Buffer.isBuffer(raw)) {
+    throw new TypeError('raw Markdown must be a string or Buffer');
+  }
+  const abs = resolveNotePath(relPath);
+  const rel = toRelPath(abs);
+  await withPathLocks([abs], async () => {
+    assertExpectedContentHash(await currentContentHash(abs), options);
+    await atomicWriteFile(abs, raw, async () => {
+      assertExpectedContentHash(await currentContentHash(abs), options);
+    });
+    invalidateNoteCaches(abs);
+  });
+  return { path: rel, origin: 'sync' };
+}
+
+/** Delete a note received from sync without creating a local mutation. */
+export async function deleteRawNote(relPath, options = {}) {
+  const abs = resolveNotePath(relPath);
+  const rel = toRelPath(abs);
+  await withPathLocks([abs], async () => {
+    const actual = await currentContentHash(abs);
+    assertExpectedContentHash(actual, options);
+    if (actual === null) return;
+    assertExpectedContentHash(await currentContentHash(abs), options);
+    await fs.unlink(abs);
+    invalidateNoteCaches(abs);
+  });
+  return { path: rel, origin: 'sync' };
 }
 
 /**
@@ -170,15 +401,28 @@ export async function nextAvailablePath(relPath) {
 /** Move/rename a note to a new path, preserving frontmatter + body verbatim. */
 export async function moveNote(from, to, { overwrite = false } = {}) {
   const src = resolveNotePath(from);
-  const raw = await fs.readFile(src, 'utf8');
-  if (!overwrite && await noteExists(to)) {
-    throw new Error(`目标已存在: ${toRelPath(resolveNotePath(to))}`);
-  }
   const dest = resolveNotePath(to);
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.writeFile(dest, raw);
-  if (toRelPath(dest) !== toRelPath(src)) await fs.unlink(src);
-  return toRelPath(dest);
+  const fromRel = toRelPath(src);
+  const destRel = toRelPath(dest);
+  await withPathLocks([src, dest], async () => {
+    const srcStat = await fs.stat(src);
+    if (!overwrite && src !== dest) {
+      try {
+        const destStat = await fs.stat(dest);
+        const isSameFile = srcStat.dev === destStat.dev && srcStat.ino === destStat.ino;
+        if (!isSameFile) throw new Error(`目标已存在: ${destRel}`);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.rename(src, dest);
+    invalidateNoteCaches(src, dest);
+  });
+  notifyMutation({
+    type: 'move', from: fromRel, path: destRel, origin: 'local',
+  });
+  return destRel;
 }
 
 /** Normalize a frontmatter categories value into a clean string array. */
@@ -195,15 +439,20 @@ export function normalizeCategoryList(value) {
  */
 export async function updateFrontmatter(relPath, patch) {
   const abs = resolveNotePath(relPath);
-  const raw = await fs.readFile(abs, 'utf8');
-  const { data, content } = matter(raw);
-  const merged = { ...data };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v === undefined) delete merged[k];
-    else merged[k] = v;
-  }
-  await fs.writeFile(abs, matter.stringify(content, merged));
-  return toRelPath(abs);
+  const rel = toRelPath(abs);
+  await withPathLocks([abs], async () => {
+    const raw = await fs.readFile(abs, 'utf8');
+    const { data, content } = matter(raw);
+    const merged = { ...data };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete merged[k];
+      else merged[k] = v;
+    }
+    await atomicWriteFile(abs, matter.stringify(content, merged));
+    invalidateNoteCaches(abs);
+  });
+  notifyMutation({ type: 'upsert', path: rel, origin: 'local' });
+  return rel;
 }
 
 /** Set (replace) a note's categories. */
@@ -309,17 +558,23 @@ export async function searchNotes(query) {
   for (const k of _searchCache.keys()) if (!alive.has(k)) _searchCache.delete(k);
 
   const hits = [];
-  for (const { path: p, data, content, mtimeMs } of notes) {
+  for (const note of notes) {
+    const {
+      path: p, data, content, mtimeMs,
+    } = note;
+    const abs = resolveNotePath(p);
+    const generation = _noteReadGenerations.get(note) ?? pathGeneration(abs);
     let e = _searchCache.get(p);
-    if (!e || e.mtimeMs !== mtimeMs) {
+    if (!e || e.mtimeMs !== mtimeMs || e.generation !== generation) {
       const title = (data.title || p).toString();
       e = {
         mtimeMs,
+        generation,
         title,
         titleLow: title.toLowerCase(),
         hay: (title + '\n' + content).toLowerCase(),
       };
-      _searchCache.set(p, e);
+      if (pathGeneration(abs) === generation) _searchCache.set(p, e);
     }
 
     // Every term must be present (AND). Score = total occurrences, with a

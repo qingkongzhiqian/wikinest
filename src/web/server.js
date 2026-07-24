@@ -1,10 +1,11 @@
 import express from 'express';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  listTree, readNote, writeNote, deleteNote, searchNotes, noteExists,
+  listTree, readNote, readNoteVersioned, writeNote, writeNoteVersioned, deleteNote, searchNotes, noteExists,
   CONTENT_DIR, getAllNotes, nextAvailablePath, moveNote, updateFrontmatter,
-  normalizeCategoryList, setNoteCategories, listCategories, renameCategory, deleteCategory,
+  normalizeCategoryList, setNoteCategories, listCategories, renameCategory, deleteCategory, noteVersion,
 } from '../core/store.js';
 import { classifyAndSet, autoTagIfEmpty, isClassifyConfigured } from '../core/classify.js';
 import {
@@ -14,6 +15,9 @@ import {
 import {
   askWiki, semanticSearch, syncIndex, rebuildIndex, isRagConfigured, isAskConfigured,
 } from '../core/rag.js';
+import { isAiEditConfigured, streamAiEdit } from '../core/ai-edit.js';
+import { classifyAiError, toPublicAiError } from '../core/ai-errors.js';
+import { llmConfig } from '../core/llm.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { renderMarkdown } from '../render.js';
 import {
@@ -47,7 +51,77 @@ function publicError(err, code) {
   };
 }
 
-export function createApp() {
+function validateAiEditBody(body) {
+  const mode = body?.mode ?? 'selection';
+  if (!['selection', 'document', 'general'].includes(mode)) {
+    return '不支持的 AI 编辑模式';
+  }
+  if (!Array.isArray(body?.messages)) return 'messages 必须是数组';
+  for (const message of body.messages) {
+    if (message?.role !== 'user' && message?.role !== 'assistant') {
+      return '消息角色仅支持 user 或 assistant';
+    }
+    if (typeof message.content !== 'string') return '消息内容必须是字符串';
+    if (
+      message.contextMode !== undefined
+      && !['selection', 'document', 'general'].includes(message.contextMode)
+    ) {
+      return 'contextMode 仅支持 selection、document 或 general';
+    }
+  }
+  const instruction = body.messages.at(-1);
+  if (instruction?.role !== 'user' || !instruction.content.trim()) {
+    return '最后一条消息必须是非空的用户指令';
+  }
+  if (typeof body.selection !== 'string') return 'selection 必须是字符串';
+  if (typeof body.noteContent !== 'string') return 'noteContent 必须是字符串';
+  if (mode === 'selection' && !body.selection.trim()) return '选区内容不能为空';
+  if (mode === 'document' && !body.noteContent.trim()) return '当前文档内容不能为空';
+  if (typeof body.includeNote !== 'boolean') return 'includeNote 必须是布尔值';
+  return undefined;
+}
+
+export function writeSseEvent(res, event, data, {
+  signal,
+  onAbort = () => {},
+} = {}) {
+  if (res.destroyed || res.writableEnded) return Promise.resolve(false);
+  const wrote = res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  if (wrote !== false) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value, abortUpstream = false) => {
+      if (settled) return;
+      settled = true;
+      res.off('drain', handleDrain);
+      res.off('close', handleClose);
+      signal?.removeEventListener('abort', handleAbort);
+      if (abortUpstream) onAbort();
+      resolve(value);
+    };
+    const handleDrain = () => finish(true);
+    const handleClose = () => finish(false, true);
+    const handleAbort = () => finish(false, true);
+
+    res.on('drain', handleDrain);
+    res.on('close', handleClose);
+    if (signal?.aborted) handleAbort();
+    else signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+}
+
+function safeDiagnosticModel(model) {
+  return typeof model === 'string' && model.length > 0
+    ? '[configured]'
+    : '[unset]';
+}
+
+export function createApp({
+  editorDistDir,
+  isStorageConfigured: storageConfigured = isStorageConfigured,
+  uploadImage: uploadImageImpl = uploadImage,
+} = {}) {
   const app = express();
   // Behind a reverse proxy (Caddy/Nginx) so req.ip reflects the real client
   // via X-Forwarded-For. Defaults to trusting loopback (proxy on same host).
@@ -133,6 +207,35 @@ export function createApp() {
   // when a password is configured. Redirects browsers to /login; 401 for API.
   app.use(webGuard);
 
+  const resolvedEditorDistDir = path.resolve(
+    editorDistDir || fileURLToPath(new URL('../../web-dist/editor', import.meta.url)),
+  );
+  app.use('/editor-assets', (req, res, next) => {
+    let decodedPath;
+    try {
+      decodedPath = decodeURIComponent(req.path);
+    } catch {
+      return res.status(404).end();
+    }
+    const candidate = path.resolve(resolvedEditorDistDir, `.${decodedPath}`);
+    if (candidate !== resolvedEditorDistDir && !candidate.startsWith(`${resolvedEditorDistDir}${path.sep}`)) {
+      return res.status(404).end();
+    }
+    return next();
+  });
+  app.use('/editor-assets', express.static(resolvedEditorDistDir, {
+    fallthrough: false,
+    index: false,
+    dotfiles: 'deny',
+  }));
+  app.use('/editor-assets', (err, _req, res, next) => {
+    if (!err) return next();
+    if (err.status === 403 || err.status === 404) {
+      return res.status(err.status).end();
+    }
+    return next(err);
+  });
+
   // --- API ---
   app.get('/api/tree', async (_req, res) => {
     res.json(await listTree());
@@ -176,25 +279,80 @@ export function createApp() {
   app.get('/api/note', async (req, res) => {
     const p = (req.query.path || '').toString();
     try {
-      if (!(await noteExists(p))) return res.status(404).json({ error: 'not found' });
-      const note = await readNote(p);
+      const note = await readNoteVersioned(p);
       res.json({ ...note, html: renderMarkdown(note.content) });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      if (err.code === 'ENOENT') return res.status(404).json({ error: 'not found' });
+      res.status(400).json({
+        code: 'NOTE_READ_FAILED',
+        error: 'Unable to read note',
+      });
     }
   });
 
   app.put('/api/note', async (req, res) => {
-    const { path: p, content, frontmatter, autoClassify, unique } = req.body || {};
+    const {
+      path: p,
+      content,
+      markdown,
+      frontmatter,
+      autoClassify,
+      unique,
+      baseVersion,
+    } = req.body || {};
     try {
+      if (typeof p !== 'string' || !p.trim()) {
+        return res.status(400).json({ error: 'path is required' });
+      }
+      const hasBaseVersion = Object.hasOwn(req.body || {}, 'baseVersion');
+      if (hasBaseVersion && (typeof baseVersion !== 'string' || !/^[a-f0-9]{64}$/.test(baseVersion))) {
+        return res.status(400).json({ error: 'baseVersion must be a SHA-256 hex digest' });
+      }
       // For new notes, avoid clobbering an existing file with the same path.
       const target = unique ? await nextAvailablePath(p) : p;
       // Preserve existing frontmatter (title/savedAt/categories) across edits;
       // only override keys explicitly passed in.
       let base = {};
-      if (await noteExists(target)) base = (await readNote(target)).data || {};
+      let existingNote;
+      if (await noteExists(target)) {
+        existingNote = await readNote(target);
+        base = existingNote.data || {};
+      }
       const merged = { ...base, ...(frontmatter || {}) };
-      const saved = await writeNote(target, content ?? '', { frontmatter: merged });
+      const nextContent = markdown ?? content ?? '';
+      let saved;
+      let version;
+      try {
+        if (hasBaseVersion) {
+          ({ path: saved, version } = await writeNoteVersioned(target, nextContent, {
+            frontmatter: merged,
+            baseVersion,
+          }));
+        } else {
+          saved = await writeNote(target, nextContent, { frontmatter: merged });
+        }
+      } catch (error) {
+        if (error.code !== 'NOTE_VERSION_CONFLICT') throw error;
+        const conflictBase = `${target.replace(/\.md$/i, '')}-conflict-local.md`;
+        let conflictPath;
+        for (;;) {
+          const candidate = await nextAvailablePath(conflictBase);
+          try {
+            conflictPath = await writeNote(candidate, nextContent, {
+              frontmatter: merged,
+              mode: 'skip',
+            });
+            break;
+          } catch (copyError) {
+            if (!/note already exists:/.test(copyError.message)) throw copyError;
+          }
+        }
+        return res.status(409).json({
+          code: 'NOTE_VERSION_CONFLICT',
+          conflictPath,
+          currentVersion: error.currentVersion,
+        });
+      }
 
       // Auto-classify when configured and the note has no categories yet.
       // Skip digests (synthesized articles) so they don't pollute categories.
@@ -202,9 +360,15 @@ export function createApp() {
       if (autoClassify !== false && !categories.length && !isDigest({ path: saved, data: merged })) {
         categories = await autoTagIfEmpty(saved);
       }
-      res.json({ ok: true, path: saved, categories });
+      if (!version || categories.length) {
+        version = (await readNoteVersioned(saved)).version;
+      }
+      res.json({ ok: true, path: saved, categories, version });
     } catch (err) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json({
+        code: 'NOTE_SAVE_FAILED',
+        error: 'Unable to save note',
+      });
     }
   });
 
@@ -254,6 +418,91 @@ export function createApp() {
   // --- Categories ---
   app.get('/api/classify/status', (_req, res) => {
     res.json({ enabled: isClassifyConfigured() });
+  });
+
+  app.get('/api/ai/edit/status', (_req, res) => {
+    res.json({ enabled: isAiEditConfigured() });
+  });
+
+  app.post('/api/ai/edit/chat', async (req, res) => {
+    const requestId = randomUUID();
+    const validationError = validateAiEditBody(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
+    if (!isAiEditConfigured()) {
+      return res.status(400).json({
+        code: 'LLM_NOT_CONFIGURED',
+        error: 'AI editing is not configured',
+      });
+    }
+
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+
+    const controller = new AbortController();
+    let ended = false;
+    const abortOnRequestClose = () => {
+      if ((!req.complete || req.aborted) && !res.writableEnded) controller.abort();
+    };
+    const abortOnResponseClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    const endOnce = () => {
+      if (ended) return;
+      ended = true;
+      if (!res.writableEnded && !res.destroyed) res.end();
+    };
+    req.on('close', abortOnRequestClose);
+    res.on('close', abortOnResponseClose);
+
+    try {
+      for await (const text of streamAiEdit(req.body, { signal: controller.signal })) {
+        if (res.destroyed || res.writableEnded) break;
+        const wrote = await writeSseEvent(res, 'delta', { text }, {
+          signal: controller.signal,
+          onAbort: () => controller.abort(),
+        });
+        if (!wrote) break;
+      }
+      if (!res.destroyed && !res.writableEnded && !controller.signal.aborted) {
+        await writeSseEvent(res, 'done', {}, {
+          signal: controller.signal,
+          onAbort: () => controller.abort(),
+        });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const classified = classifyAiError(error);
+        const config = llmConfig();
+        let providerHost;
+        try {
+          providerHost = new URL(config.baseUrl).hostname;
+        } catch {
+          providerHost = undefined;
+        }
+        console.error('AI edit upstream failure', {
+          requestId,
+          code: classified.code,
+          status: classified.status,
+          providerHost,
+          model: safeDiagnosticModel(config.model),
+        });
+        if (!res.destroyed && !res.writableEnded) {
+          await writeSseEvent(res, 'error', toPublicAiError(error, requestId), {
+            signal: controller.signal,
+            onAbort: () => controller.abort(),
+          });
+        }
+      }
+    } finally {
+      req.off('close', abortOnRequestClose);
+      res.off('close', abortOnResponseClose);
+      endOnce();
+    }
   });
 
   // Whether AI organize (tidy + synthesize) is available (same LLM config).
@@ -480,7 +729,7 @@ export function createApp() {
 
   // Tells the frontend whether image upload is available.
   app.get('/api/upload/status', (_req, res) => {
-    res.json({ enabled: isStorageConfigured() });
+    res.json({ enabled: storageConfigured() });
   });
 
   // Image upload → S3-compatible object storage. Body is the raw image bytes;
@@ -490,7 +739,7 @@ export function createApp() {
     uploadLimiter,
     express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
     async (req, res) => {
-      if (!isStorageConfigured()) {
+      if (!storageConfigured()) {
         return res.status(400).json({
           code: 'STORAGE_NOT_CONFIGURED',
           error: 'Image storage is not configured',
@@ -498,14 +747,40 @@ export function createApp() {
       }
       try {
         const contentType = req.get('content-type');
-        const filename = decodeURIComponent(req.get('x-filename') || 'image');
-        const { url } = await uploadImage(req.body, { filename, contentType });
+        if (!contentType?.startsWith('image/')) {
+          return res.status(400).json({
+            code: 'INVALID_IMAGE',
+            error: '不支持的图片类型',
+          });
+        }
+        let filename = 'image';
+        try {
+          filename = decodeURIComponent(req.get('x-filename') || 'image');
+        } catch {
+          return res.status(400).json({
+            code: 'INVALID_FILENAME',
+            error: '图片文件名无效',
+          });
+        }
+        const { url } = await uploadImageImpl(req.body, { filename, contentType });
         res.json({ ok: true, url });
-      } catch (err) {
-        res.status(400).json({ error: err.message });
+      } catch {
+        res.status(502).json({
+          code: 'UPLOAD_FAILED',
+          error: '图片上传失败，请稍后重试',
+        });
       }
     },
   );
+  app.use('/api/upload', (err, _req, res, next) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      return res.status(413).json({
+        code: 'UPLOAD_TOO_LARGE',
+        error: '图片文件过大',
+      });
+    }
+    return next(err);
+  });
 
   // --- Frontend (single self-contained page) ---
   app.get('*', (_req, res) => {
@@ -516,8 +791,14 @@ export function createApp() {
   return app;
 }
 
-export function startServer({ port = 4321, host } = {}) {
-  const app = createApp();
+export function startServer({
+  port = 4321,
+  host,
+  editorDistDir,
+  isStorageConfigured,
+  uploadImage,
+} = {}) {
+  const app = createApp({ editorDistDir, isStorageConfigured, uploadImage });
   return new Promise((resolve) => {
     const server = app.listen(port, host, () => {
       const actualPort = server.address().port;
