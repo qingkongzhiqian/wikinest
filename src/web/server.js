@@ -144,10 +144,19 @@ export function createApp({
   app.use((req, res, next) => {
     const origin = req.get('origin') || '';
     if (/^(?:chrome|edge|moz)-extension:\/\//.test(origin)) {
+      const isCaptureRoute = req.path === '/api/bookmarks'
+        || req.path === '/api/clips'
+        || /^\/api\/clips\/(?:translate|summarize|key-points|explain|ask)$/.test(req.path);
+      if (!isCaptureRoute) {
+        return res.status(403).json({
+          code: 'EXTENSION_ROUTE_FORBIDDEN',
+          error: 'Browser extensions may only use capture APIs',
+        });
+      }
       res.set({
         'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
         Vary: 'Origin',
       });
       if (req.method === 'OPTIONS') return res.status(204).end();

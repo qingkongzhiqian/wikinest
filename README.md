@@ -174,7 +174,12 @@ npm run desktop
 
 ## Sync a desktop Vault
 
-The desktop app can synchronize a Vault in both directions through AWS S3, Cloudflare R2, Alibaba Cloud OSS, MinIO, or another S3-compatible object store. Vault sync is configured per Vault and is completely separate from image storage: image `S3_*` settings and image objects are not reused.
+The desktop app can synchronize a Vault in both directions through AWS S3 or an
+S3-compatible object store that honors conditional object creation with
+`If-None-Match: *`. Provider presets are available for Cloudflare R2, Alibaba
+Cloud OSS, and MinIO, but compatibility depends on the provider version and
+configuration. Vault sync is configured per Vault and is completely separate
+from image storage: image `S3_*` settings and image objects are not reused.
 
 Only `.md` files are synchronized. Wikinest does not upload `.index/`, local settings or sync state, or image objects referenced by notes.
 
@@ -190,7 +195,12 @@ Use a private bucket and credentials limited to the chosen prefix with only the 
 
 An empty sync password stores note paths and contents in plaintext in the bucket. **This is a significant privacy risk**, even with a private bucket. With a password, Wikinest derives a key using scrypt and encrypts both paths and contents with AES-256-GCM. The password is never recoverable; if every configured device forgets it, the remote data cannot be decrypted.
 
-An empty prefix must be initialized by exactly one first device. Do not initialize it concurrently from multiple devices, especially with different passwords or plaintext/encrypted modes. Wait for the first successful sync before configuring later devices. This single-initializer rule is required by sync protocol v1 because S3-compatible stores do not provide a portable compare-and-swap operation for metadata.
+Sync protocol v1 initializes an empty prefix with a conditional write, so only
+one remote manifest can win when first devices race. Backends that ignore or
+reject `If-None-Match: *` are not supported for Vault sync. Still wait for the
+first device's complete successful sync before configuring later devices; this
+avoids competing first uploads and gives you a clear recovery point if provider
+compatibility or credentials are wrong.
 
 The first device initializes the prefix as either plaintext or password-encrypted. That prefix's mode and password cannot be changed in place. To switch mode/password or migrate to another remote, configure a new, empty prefix on the first device only. Wikinest creates independent local sync state for the new remote identity and uploads the current local `.md` files as the new Vault's initial contents; it does not reference blobs from the old prefix. After that first sync succeeds, configure the remaining devices. The old prefix is retained and is never deleted automatically.
 

@@ -42,6 +42,24 @@ test('capture URL normalization removes fragments and tracking parameters', () =
   assert.throws(() => capture.normalizeCaptureUrl('file:///tmp/private'), /HTTP or HTTPS/);
 });
 
+test('capture records reject unsafe source URLs even with a valid canonical URL', async () => {
+  await assert.rejects(
+    capture.saveBookmark({
+      url: 'file:///tmp/private',
+      canonicalUrl: 'https://example.com/safe-looking',
+    }),
+    /HTTP or HTTPS/,
+  );
+  await assert.rejects(
+    capture.saveWebClip({
+      sourceUrl: 'javascript:alert(1)',
+      canonicalUrl: 'https://example.com/safe-looking',
+      originalMarkdown: 'quoted text',
+    }),
+    /HTTP or HTTPS/,
+  );
+});
+
 test('bookmarks use an independent kind and dedupe canonical URLs', async () => {
   const first = await capture.saveBookmark({
     url: 'https://example.com/read?utm_source=newsletter',
@@ -111,6 +129,12 @@ test('capture APIs expose kinds separately and extension origins receive CORS', 
       response.headers.get('access-control-allow-origin'),
       'chrome-extension://abcdefghijklmnop',
     );
+
+    const forbidden = await fetch(urlFor(server, '/api/index'), {
+      headers: { origin: 'chrome-extension://abcdefghijklmnop' },
+    });
+    assert.equal(forbidden.status, 403);
+    assert.equal(forbidden.headers.get('access-control-allow-origin'), null);
 
     const indexResponse = await fetch(urlFor(server, '/api/index'));
     const index = await indexResponse.json();

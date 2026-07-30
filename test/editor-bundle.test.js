@@ -24,3 +24,10 @@ test('Docker image builds and copies the production editor bundle', async () => 
   assert.match(dockerfile, /RUN npm run editor:build/);
   assert.match(dockerfile, /COPY --from=editor-build \/app\/web-dist \.\/web-dist/);
 });
+
+test('every Electron packaging command builds fresh editor assets', async () => {
+  const pkg = JSON.parse(await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+  for (const name of ['dist', 'dist:dir', 'dist:mac', 'dist:win', 'dist:linux']) {
+    assert.match(pkg.scripts[name], /^npm run editor:build && electron-builder/);
+  }
+});

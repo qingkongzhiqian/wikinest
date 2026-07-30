@@ -36,11 +36,11 @@
     "test": "npm run editor:test && npm run editor:build && node --test 'test/**/*.test.js' && node test/upload.integration.js",
     "desktop": "npm run editor:build && electron desktop/main.js",
     "desktop:dev": "concurrently -k \"npm:editor:dev\" \"wait-on http://127.0.0.1:5173/src/main.tsx && cross-env WIKINEST_EDITOR_DEV_URL=http://127.0.0.1:5173 electron desktop/main.js\"",
-    "dist": "electron-builder",
-    "dist:dir": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dist": "npm run editor:build && electron-builder",
+    "dist:dir": "npm run editor:build && electron-builder --dir",
+    "dist:mac": "npm run editor:build && electron-builder --mac",
+    "dist:win": "npm run editor:build && electron-builder --win",
+    "dist:linux": "npm run editor:build && electron-builder --linux"
   },
   "engines": {
     "node": ">=18"

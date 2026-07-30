@@ -81,6 +81,8 @@ test('extension scripts parse and keep saving behind explicit confirmation', asy
   assert.match(panel, /api\('\/api\/clips\/ask'/);
   assert.match(panel, /chrome\.storage\.local\.set/);
   assert.match(panel, /const CHAT_KEY = 'chatHistory'/);
+  assert.match(panel, /chrome\.storage\.session\.set\(\{ \[CHAT_KEY\]/);
+  assert.match(panel, /chrome\.storage\.session\.get\(CHAT_KEY\)/);
   assert.match(panel, /\$\('newChat'\)\.addEventListener\('click', startNewChat\)/);
   assert.match(panel, /message\.contextQuote = capture\.originalMarkdown/);
   assert.match(panel, /await appendMessage\('user', question, true\)/);

@@ -20,7 +20,9 @@ This directory is an unpacked Chrome/Edge Manifest V3 extension.
 - Choose **仅收藏网址** in the panel when you only want the link.
 - Select text and use **在 Wikinest 中处理选中内容** from the context menu.
 - Ask any question about the selection, or use translation, summary, key-point,
-  and explanation shortcuts. AI output remains temporary until the clip is saved.
+  and explanation shortcuts. Selection context and AI chat history stay only in
+  browser session storage and are cleared when the browser session ends; nothing
+  is written to the Vault until you explicitly save a clip.
 
 Bookmarks are stored under `bookmarks/`; confirmed web clips are stored under
 `clips/`. Both remain ordinary Markdown files and participate in Vault sync.

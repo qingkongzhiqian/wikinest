@@ -46,7 +46,7 @@ async function persistChats() {
   chats = chats
     .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
     .slice(0, MAX_CHATS);
-  await chrome.storage.local.set({ [CHAT_KEY]: { activeChatId, chats } });
+  await chrome.storage.session.set({ [CHAT_KEY]: { activeChatId, chats } });
   renderHistory();
 }
 
@@ -231,7 +231,7 @@ async function loadModelConfig() {
 }
 
 async function loadChats() {
-  const state = await chrome.storage.local.get(CHAT_KEY);
+  const state = await chrome.storage.session.get(CHAT_KEY);
   const saved = state[CHAT_KEY];
   chats = Array.isArray(saved?.chats) ? saved.chats.filter((chat) => (
     chat && typeof chat.id === 'string' && Array.isArray(chat.messages)

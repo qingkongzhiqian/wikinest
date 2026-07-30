@@ -17,8 +17,9 @@ All notable changes to Wikinest are documented here.
 
 - Long notes are organized in bounded chunks instead of being truncated, with a
   longer per-chunk timeout for slower models.
-- Vault sync now uses conditional remote initialization and tighter shutdown
-  coordination to protect concurrent setup and in-flight syncs.
+- Vault sync now uses conditional remote initialization on compatible S3
+  backends and tighter shutdown coordination to protect concurrent setup and
+  in-flight syncs.
 - Bookmark and clip AI actions can use an extension-specific OpenAI-compatible
   model configuration without changing the desktop model.
 - Docker builds now include the production unified-editor assets.

@@ -57,6 +57,23 @@ export function normalizeCaptureUrl(value) {
   return parsed.toString();
 }
 
+function captureSourceUrl(value) {
+  const source = cleanText(value, 8_000);
+  normalizeCaptureUrl(source);
+  return source;
+}
+
+function optionalCaptureUrl(value) {
+  const source = cleanText(value, 8_000);
+  if (!source) return undefined;
+  try {
+    normalizeCaptureUrl(source);
+    return source;
+  } catch {
+    return undefined;
+  }
+}
+
 function slugify(value, fallback) {
   const slug = cleanText(value, 100)
     .normalize('NFKC')
@@ -106,7 +123,7 @@ export async function listBookmarkTags() {
 }
 
 export async function saveBookmark(input, { now = new Date() } = {}) {
-  const url = cleanText(input?.url, 8_000);
+  const url = captureSourceUrl(input?.url);
   const canonicalUrl = normalizeCaptureUrl(input?.canonicalUrl || url);
   const parsed = new URL(canonicalUrl);
   const title = cleanText(input?.title, MAX_TITLE_CHARS) || parsed.hostname;
@@ -128,7 +145,7 @@ export async function saveBookmark(input, { now = new Date() } = {}) {
     domain: parsed.hostname,
     description: description || undefined,
     siteName: cleanText(input?.siteName, 200) || undefined,
-    favicon: cleanText(input?.favicon, 8_000) || undefined,
+    favicon: optionalCaptureUrl(input?.favicon),
     status: 'unread',
     savedAt,
   });
@@ -232,7 +249,7 @@ function clipBody({
 }
 
 export async function saveWebClip(input, { now = new Date() } = {}) {
-  const sourceUrl = cleanText(input?.sourceUrl || input?.url, 8_000);
+  const sourceUrl = captureSourceUrl(input?.sourceUrl || input?.url);
   const canonicalUrl = normalizeCaptureUrl(input?.canonicalUrl || sourceUrl);
   const mode = input?.captureMode === 'article' ? 'article' : 'selection';
   const originalMarkdown = cleanText(input?.originalMarkdown, MAX_CLIP_CHARS);
