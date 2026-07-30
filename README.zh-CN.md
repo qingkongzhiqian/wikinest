@@ -64,7 +64,7 @@ Markdown 知识库持续保持整洁
 
 ### 记录之前，不需要先整理
 
-你可以直接在编辑器里写，粘贴一大段文字，通过命令行导入，或者让 AI 助手把当前对话存进知识库。
+你可以直接在编辑器里写，粘贴一大段文字，从浏览器收藏网址或剪藏选区，通过命令行导入，或者让 AI 助手把当前对话存进知识库。
 
 不必先决定放在哪个文件夹，不必想标签，也不必把内容收拾得像一篇完整文章之后才配保存。
 
@@ -113,6 +113,7 @@ Wikinest 为它们补上一个长期记忆层：
 - **图片上传** —— 粘贴或拖拽图片到任意 S3 兼容存储。
 - **加密 Vault 同步** —— 通过 S3 兼容对象存储在桌面设备间同步 Markdown。
 - **统一 Markdown 编辑器** —— 直接编辑渲染后的 Markdown，并为不支持或异常的文档保留源码回退。
+- **浏览器采集（Beta）** —— 通过 Chrome/Edge 侧边栏收藏网址，或在确认后把选中文字保存为 Markdown。
 - **中英文界面** —— 在设置中即时切换 English / 简体中文。
 - **桌面、Web、Docker 与 CLI** —— 同一个知识库，多种使用方式。
 
@@ -128,14 +129,24 @@ Wikinest 为它们补上一个长期记忆层：
 
 AI 遵循选区优先：编辑器存在非空选区时，默认只发送选区。只有捕获的选区仍然有效时，AI 结果才可替换选区或插入其后；写回操作可以撤销，并继续经过普通的保存和冲突检查。
 
+## 从 Chrome 或 Edge 采集
+
+仓库在 [`browser-extension/`](./browser-extension) 中提供开源的 **Wikinest 网页助手**。当前以未打包 Beta 形式分发：
+
+1. 启动 Wikinest Desktop，确保本地服务运行在 `http://127.0.0.1:4321`。
+2. 打开 `chrome://extensions` 或 `edge://extensions`，启用**开发者模式**。
+3. 点击**加载已解压的扩展程序**，选择仓库中的 `browser-extension` 目录。
+
+侧边栏可以收藏当前网址、采集选中文字，也可以先查看 AI 翻译、摘要、要点、解释或问答结果，再决定是否保存。收藏和确认后的剪藏仍是 `bookmarks/` 与 `clips/` 下的普通 Markdown。扩展的大模型配置是可选项，仅保存在浏览器本地。快捷键和完整说明见[扩展 README](./browser-extension/README.md)。
+
 ## 从桌面版开始
 
-当前 [GitHub Releases](https://github.com/qingkongzhiqian/wikinest/releases) 中提供链接的版本仅适用于 macOS。
+当前 [Wikinest 1.1.0](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.1.0) 提供的安装包仅适用于 macOS。
 
 | Mac | 下载 |
 | --- | --- |
-| Apple Silicon — M1、M2、M3、M4 或 M5 | [下载 DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1-arm64.dmg) |
-| Intel | [下载 DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1.dmg) |
+| Apple Silicon — M1、M2、M3、M4 或 M5 | [下载 DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0-arm64.dmg) |
+| Intel | [下载 DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0.dmg) |
 
 Windows 和 Linux 是受支持的构建目标；此处没有已发布安装包的链接，可自行从源码构建。
 

@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import test from 'node:test';
 import { startServer } from '../src/web/server.js';
-
-const execFileAsync = promisify(execFile);
 
 async function withServer(run, options = {}) {
   const server = await startServer({ port: 0, host: '127.0.0.1', ...options });
@@ -15,22 +11,17 @@ async function withServer(run, options = {}) {
   }
 }
 
-function postOversizedImage(base, bytes) {
-  const script = `
-    const response = await fetch(${JSON.stringify(`${base}/api/upload`)}, {
-      method: 'POST',
-      headers: { 'content-type': 'image/png', 'x-filename': 'large.png' },
-      body: new Uint8Array(${bytes}),
-    });
-    process.stdout.write(JSON.stringify({
-      status: response.status,
-      contentType: response.headers.get('content-type'),
-      body: await response.json(),
-    }));
-  `;
-  return execFileAsync(process.execPath, ['--input-type=module', '--eval', script], {
-    maxBuffer: 64 * 1024,
-  }).then(({ stdout }) => JSON.parse(stdout));
+async function postOversizedImage(base, bytes) {
+  const response = await fetch(`${base}/api/upload`, {
+    method: 'POST',
+    headers: { 'content-type': 'image/png', 'x-filename': 'large.png' },
+    body: new Uint8Array(bytes),
+  });
+  return {
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    body: await response.json(),
+  };
 }
 
 async function rejectsOversizedBody() {

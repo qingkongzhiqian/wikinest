@@ -62,7 +62,9 @@ You and your AI can recall it later
 
 ### Capture without preparing
 
-Write in the editor, paste a wall of text, use the CLI, or tell an AI assistant to save the current conversation through MCP.
+Write in the editor, paste a wall of text, capture a bookmark or selection from
+your browser, use the CLI, or tell an AI assistant to save the current
+conversation through MCP.
 
 No folder decision. No tag ritual. No need to make the note presentable before it deserves to exist.
 
@@ -109,6 +111,7 @@ Your knowledge is still stored as ordinary `.md` files in a folder you choose. T
 - **Image upload** — paste or drop images into any S3-compatible storage.
 - **Encrypted Vault sync** — synchronize Markdown between desktop devices through S3-compatible object storage.
 - **Unified Markdown editor** — edit rendered Markdown directly, with source fallback for unsupported or malformed documents.
+- **Browser capture (beta)** — save bookmarks or review selected text in a Chrome/Edge side panel before writing it as Markdown.
 - **English and Simplified Chinese UI** — switch languages from Settings.
 - **Desktop, Web, Docker, and CLI** — one knowledge base, multiple ways to use it.
 
@@ -124,14 +127,31 @@ Each save carries the version read with the note. If the file changed outside th
 
 AI is selection-first: with a non-empty editor selection, only that selection is sent by default. AI replacements and inserts are applied only when their captured selection is still current, remain undoable, and then follow the normal save and conflict checks.
 
+## Capture from Chrome or Edge
+
+The repository includes the open-source **Wikinest Web Capture** extension under
+[`browser-extension/`](./browser-extension). It is currently distributed as an
+unpacked beta:
+
+1. Start Wikinest Desktop so the local service is available at `http://127.0.0.1:4321`.
+2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
+3. Choose **Load unpacked** and select the repository's `browser-extension` directory.
+
+Use the side panel to save the current URL, collect a selected passage, or review
+AI translation, summary, key points, explanation, and question-answering output
+before saving. Bookmarks and confirmed clips remain ordinary Markdown under
+`bookmarks/` and `clips/`. Extension model credentials are optional and stay in
+browser-local storage. See the [extension README](./browser-extension/README.md)
+for shortcuts and details.
+
 ## Download the desktop app
 
-The current linked release, [Wikinest 1.0.1](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.0.1), is for macOS. Choose the installer that matches your Mac:
+The current linked release, [Wikinest 1.1.0](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.1.0), is for macOS. Choose the installer that matches your Mac:
 
 | Mac | Download |
 | --- | --- |
-| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1-arm64.dmg) |
-| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1.dmg) |
+| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0-arm64.dmg) |
+| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0.dmg) |
 
 Both installers are signed with the Developer ID of Wise Future Innovations Limited. This build is not notarized yet, so on first launch right-click the app and choose **Open** (or allow it under **System Settings → Privacy & Security**).
 

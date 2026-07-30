@@ -18,3 +18,9 @@ test('production editor bundle does not depend on Node process globals', async (
     );
   }
 });
+
+test('Docker image builds and copies the production editor bundle', async () => {
+  const dockerfile = await readFile(path.resolve(process.cwd(), 'Dockerfile'), 'utf8');
+  assert.match(dockerfile, /RUN npm run editor:build/);
+  assert.match(dockerfile, /COPY --from=editor-build \/app\/web-dist \.\/web-dist/);
+});
