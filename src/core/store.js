@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
+import { CONTENT_KINDS, contentKind } from './content-kind.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -457,6 +458,10 @@ export async function updateFrontmatter(relPath, patch) {
 
 /** Set (replace) a note's categories. */
 export async function setNoteCategories(relPath, categories) {
+  const { data } = await readNote(relPath);
+  if (contentKind(data) !== CONTENT_KINDS.NOTE) {
+    throw new Error('categories are only available for knowledge notes');
+  }
   const cats = normalizeCategoryList(categories);
   return updateFrontmatter(relPath, { categories: cats.length ? cats : undefined });
 }
@@ -466,6 +471,7 @@ export async function listCategories() {
   const notes = await getAllNotes();
   const counts = new Map();
   for (const { data } of notes) {
+    if (contentKind(data) !== CONTENT_KINDS.NOTE) continue;
     for (const c of normalizeCategoryList(data.categories)) {
       counts.set(c, (counts.get(c) || 0) + 1);
     }
@@ -483,6 +489,7 @@ export async function renameCategory(from, to) {
   let changed = 0;
   for (const p of paths) {
     const { data } = await readNote(p);
+    if (contentKind(data) !== CONTENT_KINDS.NOTE) continue;
     const cats = normalizeCategoryList(data.categories);
     if (!cats.includes(from)) continue;
     const next = normalizeCategoryList(cats.map((c) => (c === from ? target : c)));
@@ -499,6 +506,7 @@ export async function deleteCategory(name) {
   let changed = 0;
   for (const p of paths) {
     const { data } = await readNote(p);
+    if (contentKind(data) !== CONTENT_KINDS.NOTE) continue;
     const cats = normalizeCategoryList(data.categories);
     if (!cats.includes(name)) continue;
     const next = cats.filter((c) => c !== name);
@@ -540,14 +548,14 @@ function countOccurrences(hay, needle) {
 // Search index cache: reuse the lowercased haystack per note across searches,
 // rebuilding an entry only when the note's mtime changes. This keeps repeated
 // searches from re-lowercasing every note body on each keystroke.
-const _searchCache = new Map(); // path -> { mtimeMs, title, titleLow, hay }
+const _searchCache = new Map(); // path -> { mtimeMs, title, titleLow, kind, hay }
 
 /**
  * Case-insensitive full-text search over title and body.
  * - Multi-keyword: whitespace-separated terms are ANDed (all must appear).
  * - Phrases: wrap in "double quotes" to match a term containing spaces.
  * - Ranked: title hits and more frequent matches score higher.
- * @returns {Promise<Array<{ path, title, snippet, score }>>}
+ * @returns {Promise<Array<{ path, title, kind, snippet, score }>>}
  */
 export async function searchNotes(query) {
   const terms = parseSearchTerms(query);
@@ -567,12 +575,26 @@ export async function searchNotes(query) {
     let e = _searchCache.get(p);
     if (!e || e.mtimeMs !== mtimeMs || e.generation !== generation) {
       const title = (data.title || p).toString();
+      const kind = contentKind(data);
+      const metadata = [
+        data.url,
+        data.canonicalUrl,
+        data.domain,
+        data.description,
+        data.summary,
+        ...(Array.isArray(data.tags) ? data.tags : [data.tags]),
+        data.sourceUrl,
+        data.sourceDomain,
+        data.siteName,
+        data.author,
+      ].filter((value) => typeof value === 'string').join('\n');
       e = {
         mtimeMs,
         generation,
         title,
+        kind,
         titleLow: title.toLowerCase(),
-        hay: (title + '\n' + content).toLowerCase(),
+        hay: `${title}\n${metadata}\n${content}`.toLowerCase(),
       };
       if (pathGeneration(abs) === generation) _searchCache.set(p, e);
     }
@@ -593,7 +615,9 @@ export async function searchNotes(query) {
 
     const start = Math.max(0, firstIdx - 40);
     const snippet = e.hay.slice(start, firstIdx + 80).replace(/\s+/g, ' ').trim();
-    hits.push({ path: p, title: e.title, snippet, score });
+    hits.push({
+      path: p, title: e.title, kind: e.kind, snippet, score,
+    });
   }
 
   hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));

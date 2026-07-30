@@ -47,12 +47,25 @@ test('clean source fallback can leave while dirty or conflicted fallback stays p
   }), false);
 });
 
+test('editor TOC keeps non-empty H2/H3 headings in document order', () => {
+  assert.deepEqual(pageModule.editorTocEntries([
+    { tagName: 'H1', textContent: '标题' },
+    { tagName: 'H2', textContent: ' 第一节 ' },
+    { tagName: 'H3', textContent: '细节' },
+    { tagName: 'H2', textContent: '  ' },
+  ]), [
+    { index: 1, text: '第一节', sub: false },
+    { index: 2, text: '细节', sub: true },
+  ]);
+});
+
 test('unified editing keeps the original title, categories, and organize actions visible', () => {
   const element = () => ({ style: { display: 'initial' }, hidden: true });
   const elements = {
     articleRead: element(),
     articleBody: element(),
     articleSubtitle: element(),
+    unifiedEditorBody: element(),
     unifiedEditor: element(),
     legacyEditor: element(),
     returnEditorButton: element(),
@@ -69,12 +82,21 @@ test('unified editing keeps the original title, categories, and organize actions
   assert.equal(elements.articleRead.style.display, '');
   assert.equal(elements.articleBody.style.display, 'none');
   assert.equal(elements.articleSubtitle.style.display, 'none');
+  assert.equal(elements.unifiedEditorBody.style.display, '');
   assert.equal(elements.unifiedEditor.hidden, false);
   assert.equal(elements.tidyButton.style.display, '');
   assert.equal(elements.editButton.style.display, '');
   assert.equal(elements.deleteButton.style.display, '');
   assert.equal(elements.renameButton.style.display, '');
   assert.equal(elements.saveButton.style.display, 'none');
+});
+
+test('unified editor owns a live TOC layout and cleans its observer', () => {
+  assert.match(PAGE_HTML, /id="unifiedEditorBody"/);
+  assert.match(PAGE_HTML, /id="editorToc"/);
+  assert.match(PAGE_HTML, /new MutationObserver/);
+  assert.match(PAGE_HTML, /clearUnifiedEditorToc\(\)/);
+  assert.match(PAGE_HTML, /requestAnimationFrame/);
 });
 
 test('document navigator flushes once before effects and suppresses effects after a failed flush', async () => {
@@ -212,7 +234,9 @@ test('page wires every document departure through the navigator without wrapping
   assert.doesNotMatch(PAGE_HTML, /documentNavigator\.leave\(\(\) => openNote\(/);
   for (const pattern of [
     /brand\.onclick = \(\) => leaveCurrentDocument/,
+    // Rows always open the in-app card; leaving for the web is its own button.
     /row\.onclick = \(\) => openNote\(it\.path\)/,
+    /open\.onclick = \(e\) => \{ e\.stopPropagation\(\); openExternalUrl\(it\.url\); \}/,
     /await leaveCurrentDocument\(showIndex\)/,
     /return leaveCurrentDocument\(\(\) => doAsk\(query\)\)/,
     /\$\('newBtn'\)\.onclick = \(\) => startDraft\(\)/,

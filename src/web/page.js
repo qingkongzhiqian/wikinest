@@ -10,6 +10,15 @@ const AI_DRAWER_DEFAULT_WIDTH = 380;
 const AI_DRAWER_MIN_WIDTH = 320;
 const AI_DRAWER_MAX_WIDTH = 560;
 
+export function editorTocEntries(headings) {
+  return Array.from(headings || []).flatMap((heading, index) => {
+    const tag = (heading?.tagName || '').toUpperCase();
+    const text = (heading?.textContent || '').trim();
+    if ((tag !== 'H2' && tag !== 'H3') || !text) return [];
+    return [{ index, text, sub: tag === 'H3' }];
+  });
+}
+
 export function clampAiDrawerWidth(value) {
   if (!Number.isFinite(value)) return AI_DRAWER_DEFAULT_WIDTH;
   return Math.min(AI_DRAWER_MAX_WIDTH, Math.max(AI_DRAWER_MIN_WIDTH, value));
@@ -846,6 +855,7 @@ export function applyUnifiedArticleChrome(elements, { organizeEnabled = false } 
   elements.articleRead.style.display = '';
   elements.articleBody.style.display = 'none';
   elements.articleSubtitle.style.display = 'none';
+  elements.unifiedEditorBody.style.display = '';
   elements.unifiedEditor.hidden = false;
   elements.legacyEditor.style.display = 'none';
   elements.returnEditorButton.style.display = 'none';
@@ -1362,6 +1372,29 @@ ${editorAssets}
     padding: 0 11px 7px; white-space: nowrap;
   }
   .side-cats { display: flex; flex-direction: column; gap: 2px; }
+
+  /* Bookmark tag filter: generated labels, so they read as filters not editors. */
+  .tag-filter { display: flex; flex-wrap: wrap; gap: 7px; padding: 24px 0 6px; }
+  .tag-filter button {
+    padding: 5px 12px; border: 1px solid var(--faint); border-radius: 999px;
+    font-size: 12.5px; color: var(--muted); background: #fff;
+    transition: color .12s, background .12s, border-color .12s;
+  }
+  .tag-filter button:hover { color: var(--fg); background: var(--hover); }
+  .tag-filter button.active {
+    color: #fff; background: var(--fg); border-color: var(--fg);
+  }
+  .row-open {
+    flex-shrink: 0; width: 30px; height: 30px; border: 1px solid var(--faint);
+    border-radius: 9px; display: grid; place-items: center; color: var(--muted);
+    background: #fff; transition: color .12s, background .12s;
+  }
+  .row-open:hover { color: var(--fg); background: var(--hover); }
+  .row-open svg {
+    width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .cat-chip.static { cursor: default; }
   .cat-dot {
     width: 7px; height: 7px; border-radius: 50%; background: #c2c2c7; flex-shrink: 0;
     margin: 0 8px 0 7px;
@@ -1511,9 +1544,11 @@ ${editorAssets}
     padding: 26px 0; border-bottom: 1px solid var(--faint); cursor: pointer;
   }
   .list.as-list .row:hover .row-title { text-decoration: underline; }
+  .list.as-list .row.has-action { grid-template-columns: 150px 1fr auto; align-items: start; }
   .row-meta { display: flex; flex-direction: column; gap: 6px; }
   .row-cat { font-size: 13.5px; color: var(--fg); }
   .row-date { font-size: 13.5px; color: var(--muted); }
+  .row-tags { font-size: 12.5px; color: var(--muted); }
   .row-title { font-size: 21px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; }
   .row-badge {
     display: inline-block; vertical-align: middle; margin-right: 9px; transform: translateY(-2px);
@@ -1704,6 +1739,12 @@ ${editorAssets}
   .toc a.active { background: var(--chip); color: var(--fg); }
   .toc.empty { display: none; }
   .article-body.no-toc { grid-template-columns: minmax(0, 760px); }
+  .unified-editor-body {
+    display: grid; grid-template-columns: 220px minmax(0, 720px); gap: 56px;
+    justify-content: center; align-items: start; margin-top: 48px;
+  }
+  .unified-editor-body.no-toc { grid-template-columns: minmax(0, 760px); }
+  .unified-editor-body > #unifiedEditor { min-width: 0; }
 
   .content { line-height: 1.8; font-size: 17px; }
   .content > :first-child { margin-top: 0; }
@@ -1859,7 +1900,10 @@ ${editorAssets}
 
   @media (max-width: 1024px) {
     .article-body, .article-body.no-toc { grid-template-columns: minmax(0, 760px); }
-    .toc { display: none; }
+    .unified-editor-body, .unified-editor-body.no-toc {
+      grid-template-columns: minmax(0, 760px);
+    }
+    .toc, #editorToc { display: none; }
   }
   /* The controller selects this dedicated narrow view from viewport width. */
   .app-shell.ai-open.ai-narrow { grid-template-columns: minmax(0, 1fr); }
@@ -1931,6 +1975,14 @@ ${editorAssets}
         <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg></span>
         <span class="side-label">${t('nav.recent')}</span>
       </button>
+      <button class="side-item" data-side="bookmarks">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg></span>
+        <span class="side-label">${t('nav.bookmarks')}</span><span class="side-count" id="cntBookmarks"></span>
+      </button>
+      <button class="side-item" data-side="clips">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 3h8v5h5v13H8z"/><path d="M16 3v5h5"/><path d="M3 7v10"/></svg></span>
+        <span class="side-label">${t('nav.webClips')}</span><span class="side-count" id="cntClips"></span>
+      </button>
     </nav>
     <div class="side-sec">
       <div class="side-sec-label">${t('nav.categories')}</div>
@@ -1983,6 +2035,7 @@ ${editorAssets}
         </div>
       </div>
     </div>
+    <div id="tagFilter" class="tag-filter" style="display:none"></div>
     <div id="digestBanner"></div>
     <div class="list as-list" id="list"></div>
   </main>
@@ -2020,7 +2073,10 @@ ${editorAssets}
       </div>
     </div>
 
-    <div id="unifiedEditor" hidden></div>
+    <div class="unified-editor-body no-toc" id="unifiedEditorBody" style="display:none">
+      <nav class="toc empty" id="editorToc"></nav>
+      <div id="unifiedEditor" hidden></div>
+    </div>
     <div class="editor" id="editor" style="display:none">
       <div class="editor-tools">
         <button id="previewToggle" class="ed-btn">${t('actions.preview')}</button>
@@ -2353,6 +2409,7 @@ ${createAiThreadStore.toString()}
 ${buildSyncPayload.toString()}
 ${canRefreshSyncedNote.toString()}
 ${canLeaveSourceFallback.toString()}
+${editorTocEntries.toString()}
 ${applyUnifiedArticleChrome.toString()}
 ${createSafeNoteClient.toString()}
 ${loadNoteWithGuard.toString()}
@@ -2372,6 +2429,9 @@ ${settleAiRequest.toString()}
 const AI_CONTEXT_REFRESH_EVENTS = ${JSON.stringify(AI_CONTEXT_REFRESH_EVENTS)};
 const TAB_ALL = '__all__';
 const TAB_UNCATEGORIZED = '__uncategorized__';
+const COLLECTION_NOTES = 'note';
+const COLLECTION_BOOKMARKS = 'bookmark';
+const COLLECTION_CLIPS = 'web_clip';
 const DATE_FORMATTER = new Intl.DateTimeFormat(UI_LOCALE, {
   year: 'numeric', month: 'short', day: 'numeric',
 });
@@ -2383,6 +2443,8 @@ let sortNewest = true;
 let viewMode = 'list';
 let recentMode = false;  // "最近" nav entry: latest notes across all folders
 let digestMode = false;  // sidebar "AI 综述": list only digest notes
+let collectionMode = COLLECTION_NOTES;
+let activeTag = '';       // bookmark tag filter (generated labels, not categories)
 let selectMode = false;  // multi-select mode: pick notes → synthesize one article
 let ragEnabled = false;  // semantic search / ask available (embeddings configured)
 let aiEditEnabled = false;
@@ -2441,6 +2503,7 @@ function showUnifiedEditor() {
     articleRead: $('articleRead'),
     articleBody: $('articleBody'),
     articleSubtitle: $('artSub'),
+    unifiedEditorBody: $('unifiedEditorBody'),
     unifiedEditor: $('unifiedEditor'),
     legacyEditor: $('editor'),
     returnEditorButton: $('returnEditorBtn'),
@@ -2454,6 +2517,8 @@ function showUnifiedEditor() {
 }
 function showSourceFallback(markdown) {
   sourceFallback = true;
+  clearUnifiedEditorToc();
+  $('unifiedEditorBody').style.display = 'none';
   $('unifiedEditor').hidden = true;
   $('articleRead').style.display = 'none';
   $('editor').style.display = '';
@@ -2578,7 +2643,10 @@ function categoryLabel(value) {
 // What counts as a browsable "note" in the list/category views: real notes plus
 // hand-picked custom syntheses (which carry their sources' categories). Only the
 // auto category-level digests stay out of the list (they show as a banner).
-function isNote(i) { return !i.digest || i.custom; }
+function itemKind(i) { return i.kind || COLLECTION_NOTES; }
+function isNote(i) {
+  return itemKind(i) === COLLECTION_NOTES && (!i.digest || i.custom);
+}
 
 function fmtDate(s) {
   if (!s) return '';
@@ -2597,8 +2665,12 @@ async function loadIndex() {
 // ---------- left icon rail ----------
 function updateSideCounts() {
   const notes = items.filter(isNote).length;
+  const bookmarks = items.filter(i => itemKind(i) === COLLECTION_BOOKMARKS).length;
+  const clips = items.filter(i => itemKind(i) === COLLECTION_CLIPS).length;
   const digests = items.filter(i => i.digest).length;
   const a = $('cntAll'); if (a) a.textContent = notes;
+  const b = $('cntBookmarks'); if (b) b.textContent = bookmarks;
+  const c = $('cntClips'); if (c) c.textContent = clips;
   const d = $('cntDigest');
   if (d) { d.textContent = digests; d.style.display = digests ? '' : 'none'; }
 }
@@ -2611,6 +2683,7 @@ function setActiveSide(which) {
 // "AI 综述": show only the AI-generated digest notes as a list.
 function showDigests() {
   showIndex();
+  collectionMode = COLLECTION_NOTES;
   digestMode = true;
   recentMode = false;
   activeTab = TAB_ALL;
@@ -2654,6 +2727,8 @@ function wireSidebar() {
       else if (act === 'ask') leaveCurrentDocument(openAsk);
       else if (act === 'digest') leaveCurrentDocument(showDigests);
       else if (act === 'recent') leaveCurrentDocument(async () => { showIndex(); showRecent(); });
+      else if (act === 'bookmarks') leaveCurrentDocument(async () => { showCollection(COLLECTION_BOOKMARKS); });
+      else if (act === 'clips') leaveCurrentDocument(async () => { showCollection(COLLECTION_CLIPS); });
     };
   });
 
@@ -2672,12 +2747,53 @@ function wireSidebar() {
 }
 
 function showRecent() {
+  collectionMode = COLLECTION_NOTES;
   recentMode = true;
   digestMode = false;
   activeTab = TAB_ALL;
   $('search').value = '';
   renderTabs();
   renderList();
+}
+
+function showCollection(kind) {
+  showIndex();
+  collectionMode = kind;
+  recentMode = false;
+  digestMode = false;
+  activeTab = TAB_ALL;
+  activeTag = '';
+  if (selectMode) toggleSelectMode(false);
+  $('search').value = '';
+  renderTabs();
+  renderList();
+}
+
+// Bookmark tags are generated, so they are offered purely as filters here.
+function renderTagFilter() {
+  const wrap = $('tagFilter');
+  if (!wrap) return;
+  const counts = new Map();
+  if (collectionMode === COLLECTION_BOOKMARKS) {
+    for (const it of items) {
+      if (itemKind(it) !== COLLECTION_BOOKMARKS) continue;
+      for (const tag of (it.tags || [])) counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+  }
+  wrap.innerHTML = '';
+  if (!counts.size) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const addChip = (label, tag) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.classList.toggle('active', activeTag === tag);
+    b.onclick = () => { activeTag = tag; renderList(); updateCurFilter(); };
+    wrap.appendChild(b);
+  };
+  addChip(tr('bookmark.allTags'), '');
+  [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .forEach(([tag, count]) => addChip(tag + ' ' + count, tag));
 }
 
 // Categories now live in the left rail instead of a top tab row. This fills the
@@ -2713,32 +2829,52 @@ function renderTabs() {
   }
   updateCurFilter();
   syncActiveSide();
+  updateCollectionControls();
+}
+
+function updateCollectionControls() {
+  const select = $('selectBtn');
+  if (select) {
+    select.style.display = organizeEnabled && collectionMode === COLLECTION_NOTES ? '' : 'none';
+  }
 }
 
 // Drive the contextual page title + count: which slice you're viewing.
 function updateCurFilter() {
   const notes = items.filter(isNote);
   let label, n;
-  if (recentMode) { label = tr('nav.recent'); n = Math.min(RECENT_LIMIT, notes.length); }
+  if (collectionMode === COLLECTION_BOOKMARKS) {
+    label = activeTag || tr('nav.bookmarks');
+    n = currentItems().length;
+  } else if (collectionMode === COLLECTION_CLIPS) {
+    label = tr('nav.webClips');
+    n = items.filter(i => itemKind(i) === COLLECTION_CLIPS).length;
+  } else if (recentMode) { label = tr('nav.recent'); n = Math.min(RECENT_LIMIT, notes.length); }
   else if (digestMode) { label = tr('nav.aiDigest'); n = items.filter(i => i.digest).length; }
   else if (activeTab === TAB_ALL) { label = tr('nav.allNotes'); n = notes.length; }
   else if (activeTab === TAB_UNCATEGORIZED) { label = tr('categories.uncategorized'); n = notes.filter(i => !(i.categories || []).length).length; }
   else { label = activeTab; n = notes.filter(i => (i.categories || []).includes(activeTab)).length; }
   const t = $('idxTitle'); if (t) t.textContent = label;
-  const c = $('idxCount'); if (c) c.textContent = tr('notes.count', { count: n });
+  const countKey = collectionMode === COLLECTION_BOOKMARKS
+    ? 'bookmarks.count'
+    : collectionMode === COLLECTION_CLIPS ? 'clips.count' : 'notes.count';
+  const c = $('idxCount'); if (c) c.textContent = tr(countKey, { count: n });
   const cf = $('curFilter'); if (cf) cf.textContent = '';
 }
 
 // Highlight the rail entry matching the current view.
 function syncActiveSide() {
   let key = 'all';
-  if (recentMode) key = 'recent';
+  if (collectionMode === COLLECTION_BOOKMARKS) key = 'bookmarks';
+  else if (collectionMode === COLLECTION_CLIPS) key = 'clips';
+  else if (recentMode) key = 'recent';
   else if (digestMode) key = 'digest';
   else if (activeTab !== TAB_ALL) key = activeTab;
   setActiveSide(key);
 }
 
 function selectTab(c) {
+  collectionMode = COLLECTION_NOTES;
   activeTab = c;
   recentMode = false;
   digestMode = false;
@@ -2749,7 +2885,12 @@ function selectTab(c) {
 
 function currentItems() {
   // Auto category digests show as a banner; custom syntheses show as rows.
-  let list = items.filter(isNote);
+  let list = collectionMode === COLLECTION_NOTES
+    ? items.filter(isNote)
+    : items.filter(i => itemKind(i) === collectionMode);
+  if (collectionMode === COLLECTION_BOOKMARKS && activeTag) {
+    list = list.filter(i => (i.tags || []).includes(activeTag));
+  }
   if (!recentMode && activeTab !== TAB_ALL) {
     if (activeTab === TAB_UNCATEGORIZED) list = list.filter(i => !(i.categories || []).length);
     else list = list.filter(i => (i.categories || []).includes(activeTab));
@@ -2762,14 +2903,31 @@ function currentItems() {
   return recentMode ? list.slice(0, RECENT_LIMIT) : list;
 }
 
+function openExternalUrl(url) {
+  if (!/^https?:\\/\\//i.test(url || '')) return;
+  if (window.wikiSettings?.openExternal) {
+    void window.wikiSettings.openExternal(url).catch(() => {});
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 function renderList(list) {
   const custom = !!list;
   const data = list || currentItems();
   // Banner only while normally browsing a category (not during search).
   if (custom) $('digestBanner').innerHTML = ''; else renderDigestBanner();
+  if (custom) { const tf = $('tagFilter'); if (tf) tf.style.display = 'none'; }
+  else renderTagFilter();
   const el = $('list');
   el.className = 'list ' + (viewMode === 'grid' ? 'as-grid' : 'as-list') + (selectMode ? ' selecting' : '');
-  if (!data.length) { el.innerHTML = '<div class="empty">' + tr('empty.noNotes') + '</div>'; return; }
+  if (!data.length) {
+    const emptyKey = collectionMode === COLLECTION_BOOKMARKS
+      ? 'empty.noBookmarks'
+      : collectionMode === COLLECTION_CLIPS ? 'empty.noWebClips' : 'empty.noNotes';
+    el.innerHTML = '<div class="empty">' + tr(emptyKey) + '</div>';
+    return;
+  }
   el.innerHTML = '';
   for (const it of data) {
     const row = document.createElement('div');
@@ -2777,8 +2935,25 @@ function renderList(list) {
     row.innerHTML =
       '<div class="row-meta"><span class="row-cat"></span><span class="row-date"></span></div>' +
       '<div><div class="row-title"></div><div class="row-desc"></div></div>';
-    row.querySelector('.row-cat').textContent =
-      (it.categories && it.categories.length) ? it.categories.join(tr('punctuation.listSeparator')) : tr('categories.uncategorized');
+    if (itemKind(it) === COLLECTION_BOOKMARKS) {
+      row.querySelector('.row-cat').textContent = it.domain || tr('nav.bookmarks');
+      const tags = it.tags || [];
+      if (tags.length) {
+        const el2 = document.createElement('span');
+        el2.className = 'row-tags';
+        el2.textContent = tags.join(tr('punctuation.listSeparator'));
+        row.querySelector('.row-meta').appendChild(el2);
+      }
+    } else if (itemKind(it) === COLLECTION_CLIPS) {
+      row.querySelector('.row-cat').textContent = tr(
+        it.captureMode === 'article' ? 'clip.article' : 'clip.selection',
+      ) + (it.domain ? ' · ' + it.domain : '');
+    } else {
+      row.querySelector('.row-cat').textContent =
+        (it.categories && it.categories.length)
+          ? it.categories.join(tr('punctuation.listSeparator'))
+          : tr('categories.uncategorized');
+    }
     row.querySelector('.row-date').textContent = fmtDate(it.date);
     row.querySelector('.row-title').textContent = it.title;
     if (it.digest) {
@@ -2803,7 +2978,18 @@ function renderList(list) {
         };
       }
     } else {
+      // A bookmark row opens its card first; leaving the app stays an explicit
+      // click, so a saved URL can be reviewed, tagged and searched like a note.
       row.onclick = () => openNote(it.path);
+      if (itemKind(it) === COLLECTION_BOOKMARKS && it.url) {
+        const open = document.createElement('button');
+        open.className = 'row-open';
+        open.title = tr('bookmark.openOriginal');
+        open.innerHTML = '<svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+        open.onclick = (e) => { e.stopPropagation(); openExternalUrl(it.url); };
+        row.classList.add('has-action');
+        row.appendChild(open);
+      }
     }
     el.appendChild(row);
   }
@@ -2915,6 +3101,7 @@ async function genDigest(cat) {
 function showIndex() {
   leaveAiEditingContext('index');
   clearRenderedSelectionSnapshot();
+  clearUnifiedEditorToc();
   $('articleView').style.display = 'none';
   $('askView').style.display = 'none';
   $('indexView').style.display = '';
@@ -2966,6 +3153,7 @@ function askEmptyHTML() {
 function showAskView() {
   leaveAiEditingContext('ask');
   clearRenderedSelectionSnapshot();
+  clearUnifiedEditorToc();
   $('indexView').style.display = 'none';
   $('articleView').style.display = 'none';
   $('askView').style.display = '';
@@ -3007,6 +3195,68 @@ async function askFromCommand(query) {
 }
 
 let tocObserver = null;
+let editorTocObserver = null;
+let editorTocFrame = 0;
+
+function buildUnifiedEditorToc() {
+  editorTocFrame = 0;
+  const root = $('unifiedEditor');
+  const toc = $('editorToc');
+  const body = $('unifiedEditorBody');
+  const headings = [...root.querySelectorAll('h2, h3')];
+  const entries = editorTocEntries(headings);
+  toc.innerHTML = '';
+  if (entries.length < 2) {
+    toc.className = 'toc empty';
+    body.className = 'unified-editor-body no-toc';
+    return;
+  }
+  toc.className = 'toc';
+  body.className = 'unified-editor-body';
+  for (const entry of entries) {
+    const heading = headings[entry.index];
+    const link = document.createElement('a');
+    link.textContent = entry.text;
+    link.href = '#';
+    if (entry.sub) link.className = 'sub';
+    link.onclick = (event) => {
+      event.preventDefault();
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    toc.appendChild(link);
+  }
+}
+
+function scheduleUnifiedEditorToc() {
+  if (editorTocFrame) return;
+  editorTocFrame = requestAnimationFrame(buildUnifiedEditorToc);
+}
+
+function clearUnifiedEditorToc() {
+  editorTocObserver?.disconnect();
+  editorTocObserver = null;
+  if (editorTocFrame) cancelAnimationFrame(editorTocFrame);
+  editorTocFrame = 0;
+  const toc = $('editorToc');
+  if (toc) {
+    toc.innerHTML = '';
+    toc.className = 'toc empty';
+  }
+  const body = $('unifiedEditorBody');
+  if (body) body.className = 'unified-editor-body no-toc';
+}
+
+function observeUnifiedEditorToc() {
+  clearUnifiedEditorToc();
+  buildUnifiedEditorToc();
+  if (typeof MutationObserver !== 'function') return;
+  editorTocObserver = new MutationObserver(scheduleUnifiedEditorToc);
+  editorTocObserver.observe($('unifiedEditor'), {
+    subtree: true,
+    childList: true,
+    characterData: true,
+  });
+}
 
 function applyOpenedNote(note) {
   abortAiRequest();
@@ -3024,9 +3274,13 @@ function applyOpenedNote(note) {
   $('artDot').style.display = 'none';
   $('artSub').textContent = meta && meta.desc ? meta.desc : '';
   $('artSub').style.display = (meta && meta.desc) ? '' : 'none';
-  renderCats((note.data && note.data.categories) || []);
+  const kind = itemKind({ kind: note.data && note.data.kind });
+  renderCats((note.data && note.data.categories) || [], kind === COLLECTION_NOTES);
+  if (kind === COLLECTION_BOOKMARKS) renderBookmarkCard(note);
   showArticle();
   showUnifiedEditor();
+  observeUnifiedEditorToc();
+  if (kind !== COLLECTION_NOTES) $('tidyBtn').style.display = 'none';
 }
 
 async function runMutationAndOpen(operation, applyGuard) {
@@ -3074,6 +3328,8 @@ async function openNote(path, applyGuard, prefetchedNote) {
 
 function showView(html) {
   leaveAiEditingContext('read');
+  clearUnifiedEditorToc();
+  $('unifiedEditorBody').style.display = 'none';
   $('unifiedEditor').hidden = true;
   $('editor').style.display = 'none';
   $('articleRead').style.display = '';
@@ -3224,6 +3480,10 @@ function buildToc() {
 // "新建":直接进入一个空白编辑区,粘贴/书写,保存时 AI 自动整理排版并归类。
 async function startDraft() {
   if (selectMode) toggleSelectMode(false);
+  collectionMode = COLLECTION_NOTES;
+  recentMode = false;
+  digestMode = false;
+  activeTab = TAB_ALL;
   if (!releaseCleanSourceFallback()) {
     alert(tr('editor.navigationBlocked'));
     return false;
@@ -4162,10 +4422,62 @@ $('aiTidyBtn').onclick = async () => {
 
 function asArray(v) { return Array.isArray(v) ? v : (v ? [v] : []); }
 
-function renderCats(catsRaw) {
+// A bookmark's header carries its generated labels plus the way out to the web.
+function renderBookmarkCard(note) {
+  const data = note.data || {};
+  const el = $('artCats');
+  el.innerHTML = '';
+  const summary = (data.summary || data.description || '').toString();
+  if (summary) {
+    $('artSub').textContent = summary;
+    $('artSub').style.display = '';
+  }
+  for (const tag of asArray(data.tags)) {
+    const chip = document.createElement('span');
+    chip.className = 'cat-chip static';
+    chip.textContent = tag;
+    el.appendChild(chip);
+  }
+  const url = (data.url || data.canonicalUrl || '').toString();
+  if (url) {
+    const open = document.createElement('button');
+    open.className = 'cat-add';
+    open.textContent = tr('bookmark.openOriginal');
+    open.onclick = () => openExternalUrl(url);
+    el.appendChild(open);
+  }
+  const relabel = document.createElement('button');
+  relabel.className = 'cat-add';
+  relabel.textContent = tr('bookmark.relabel');
+  relabel.onclick = async () => {
+    const label = relabel.textContent;
+    relabel.disabled = true;
+    relabel.textContent = tr('categories.classifying');
+    try {
+      const r = await api('/api/bookmarks/enrich', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: note.path }),
+      });
+      await loadIndex();
+      const fresh = await api('/api/note?path=' + encodeURIComponent(note.path));
+      renderBookmarkCard({ ...fresh, path: note.path });
+      toast(tr('bookmark.relabeled', {
+        tags: (r.tags || []).join(tr('punctuation.listSeparator')),
+      }));
+    } catch (e) {
+      alert(tr('errors.operationFailed', { message: e.message }));
+      relabel.disabled = false;
+      relabel.textContent = label;
+    }
+  };
+  el.appendChild(relabel);
+}
+
+function renderCats(catsRaw, editable = true) {
   const cats = asArray(catsRaw);
   const el = $('artCats');
   el.innerHTML = '';
+  if (!editable) return;
   cats.forEach(c => {
     const chip = document.createElement('span');
     chip.className = 'cat-chip';
@@ -4748,7 +5060,7 @@ async function refreshFeatureFlags() {
 
   // organize (tidy + synthesize) gates
   renderDigestBanner();
-  if ($('selectBtn')) $('selectBtn').style.display = organizeEnabled ? '' : 'none';
+  updateCollectionControls();
   // rag (ask) gates
   if ($('askNav')) $('askNav').style.display = ragEnabled ? '' : 'none';
   if ($('cmdKbd')) $('cmdKbd').style.display = ragEnabled ? '' : 'none';

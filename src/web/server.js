@@ -18,6 +18,11 @@ import {
 import { isAiEditConfigured, streamAiEdit } from '../core/ai-edit.js';
 import { classifyAiError, toPublicAiError } from '../core/ai-errors.js';
 import { llmConfig } from '../core/llm.js';
+import {
+  askAboutClip, autoEnrichBookmark, enrichBookmark, isClipAiConfigured,
+  listBookmarkTags, normalizeTagList, processClipText, saveBookmark, saveWebClip,
+} from '../core/capture.js';
+import { CONTENT_KINDS, contentKind } from '../core/content-kind.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { renderMarkdown } from '../render.js';
 import {
@@ -136,6 +141,19 @@ export function createApp({
           : tp || 'loopback',
   );
   app.use(express.json({ limit: '5mb' }));
+  app.use((req, res, next) => {
+    const origin = req.get('origin') || '';
+    if (/^(?:chrome|edge|moz)-extension:\/\//.test(origin)) {
+      res.set({
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        Vary: 'Origin',
+      });
+      if (req.method === 'OPTIONS') return res.status(204).end();
+    }
+    return next();
+  });
 
   // Serve packaged brand assets and vendor libraries before the auth guard so
   // the desktop app and login page can load fully offline.
@@ -246,6 +264,7 @@ export function createApp({
   app.get('/api/index', async (_req, res) => {
     const notes = await getAllNotes();
     const items = notes.map(({ path: p, data, content, mtimeMs }) => {
+      const kind = contentKind(data);
       const name = p.split('/').pop().replace(/\.md$/, '');
       const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
       // Fall back to file mtime so every note always has a date to show.
@@ -253,11 +272,18 @@ export function createApp({
       if (!date && mtimeMs) date = new Date(mtimeMs).toISOString();
       return {
         path: p,
+        kind,
         folder,
         title: (data.title || name).toString(),
         date,
-        desc: deriveDesc(content),
-        categories: normalizeCategoryList(data.categories),
+        // The generated summary beats a marketing-heavy og:description.
+        desc: (data.summary || data.description || deriveDesc(content)).toString(),
+        categories: kind === CONTENT_KINDS.NOTE ? normalizeCategoryList(data.categories) : [],
+        tags: kind === CONTENT_KINDS.BOOKMARK ? normalizeTagList(data.tags) : [],
+        url: (data.url || data.sourceUrl || '').toString(),
+        domain: (data.domain || data.sourceDomain || '').toString(),
+        status: (data.status || '').toString(),
+        captureMode: (data.captureMode || '').toString(),
         // Synthesized category digests are surfaced as banner cards, not rows.
         digest: !!data.digest,
         // Custom (hand-picked) syntheses DO appear in their category listing.
@@ -274,6 +300,101 @@ export function createApp({
     const q = (req.query.q || '').toString().trim();
     if (!q) return res.json([]);
     res.json(await searchNotes(q));
+  });
+
+  app.post('/api/bookmarks', async (req, res) => {
+    try {
+      const result = await saveBookmark(req.body || {});
+      res.status(result.duplicate ? 200 : 201).json({
+        ok: true,
+        path: result.path,
+        duplicate: result.duplicate,
+      });
+      // Summary and tags are generated after answering: saving a URL must feel
+      // instant, and the capture must survive an absent or failing model.
+      if (!result.duplicate) void autoEnrichBookmark(result.path);
+    } catch (err) {
+      res.status(400).json({ code: 'BOOKMARK_SAVE_FAILED', error: err.message });
+    }
+  });
+
+  app.get('/api/bookmarks/tags', async (_req, res) => {
+    res.json(await listBookmarkTags());
+  });
+
+  app.post('/api/bookmarks/enrich', async (req, res) => {
+    if (!isClipAiConfigured()) {
+      return res.status(400).json({
+        code: 'LLM_NOT_CONFIGURED',
+        error: 'Bookmark labelling is not configured',
+      });
+    }
+    try {
+      const labels = await enrichBookmark((req.body?.path || '').toString(), { force: true });
+      return res.json({ ok: true, ...labels });
+    } catch (err) {
+      return res.status(400).json(toPublicAiError(err, randomUUID()));
+    }
+  });
+
+  app.post('/api/clips', async (req, res) => {
+    try {
+      const result = await saveWebClip(req.body || {});
+      res.status(result.duplicate ? 200 : 201).json({
+        ok: true,
+        path: result.path,
+        duplicate: result.duplicate,
+      });
+    } catch (err) {
+      res.status(400).json({ code: 'CLIP_SAVE_FAILED', error: err.message });
+    }
+  });
+
+  for (const [route, action] of [
+    ['translate', 'translate'],
+    ['summarize', 'summarize'],
+    ['key-points', 'key_points'],
+    ['explain', 'explain'],
+  ]) {
+    app.post(`/api/clips/${route}`, async (req, res) => {
+      if (!isClipAiConfigured(req.body?.llm)) {
+        return res.status(400).json({
+          code: 'LLM_NOT_CONFIGURED',
+          error: 'Clip AI is not configured',
+        });
+      }
+      try {
+        const output = await processClipText({
+          action,
+          text: req.body?.text,
+          targetLanguage: req.body?.targetLanguage,
+          llm: req.body?.llm,
+        });
+        return res.json({ ok: true, output });
+      } catch (err) {
+        return res.status(400).json(toPublicAiError(err, randomUUID()));
+      }
+    });
+  }
+
+  app.post('/api/clips/ask', async (req, res) => {
+    if (!isClipAiConfigured(req.body?.llm)) {
+      return res.status(400).json({
+        code: 'LLM_NOT_CONFIGURED',
+        error: 'Clip AI is not configured',
+      });
+    }
+    try {
+      const output = await askAboutClip({
+        text: req.body?.text,
+        question: req.body?.question,
+        history: req.body?.history,
+        llm: req.body?.llm,
+      });
+      return res.json({ ok: true, output });
+    } catch (err) {
+      return res.status(400).json(toPublicAiError(err, randomUUID()));
+    }
   });
 
   app.get('/api/note', async (req, res) => {
@@ -357,7 +478,12 @@ export function createApp({
       // Auto-classify when configured and the note has no categories yet.
       // Skip digests (synthesized articles) so they don't pollute categories.
       let categories = normalizeCategoryList(merged.categories);
-      if (autoClassify !== false && !categories.length && !isDigest({ path: saved, data: merged })) {
+      if (
+        autoClassify !== false
+        && contentKind(merged) === CONTENT_KINDS.NOTE
+        && !categories.length
+        && !isDigest({ path: saved, data: merged })
+      ) {
         categories = await autoTagIfEmpty(saved);
       }
       if (!version || categories.length) {
@@ -702,6 +828,7 @@ export function createApp({
     try {
       const notes = await getAllNotes();
       const targets = notes
+        .filter((n) => contentKind(n.data) === CONTENT_KINDS.NOTE)
         .filter((n) => all || !normalizeCategoryList(n.data.categories).length)
         .map((n) => n.path);
 

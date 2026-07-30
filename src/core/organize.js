@@ -14,16 +14,38 @@ import {
   isHanDocumentMajority,
   referenceHeadingForDocuments,
 } from './prompts.js';
+import { CONTENT_KINDS, contentKind } from './content-kind.js';
 
 // 综述文章统一存放目录;这些文件不参与分类计数,也不出现在普通列表里。
 export const DIGEST_DIR = 'digests';
 
 // 整理/聚合是长任务,给更宽松的超时(可用 LLM_LONG_TIMEOUT_MS 覆盖)。
-const LONG_TIMEOUT_MS = Number(process.env.LLM_LONG_TIMEOUT_MS) || 90_000;
+const LONG_TIMEOUT_MS = Number(process.env.LLM_LONG_TIMEOUT_MS) || 300_000;
 
-const MAX_TIDY_CHARS = 16_000;        // 单篇整理时喂给模型的正文上限
+const MAX_TIDY_CHARS = 6_000;         // 单次整理请求的正文上限
 const MAX_PER_NOTE_CHARS = 1_800;     // 聚合时每篇笔记截断长度
 const MAX_DIGEST_CHARS = 20_000;      // 聚合时所有来源合计上限
+
+function splitTidyContent(body) {
+  const chunks = [];
+  let remaining = body;
+  const preferredBoundary = Math.floor(MAX_TIDY_CHARS / 2);
+
+  while (remaining.length > MAX_TIDY_CHARS) {
+    let end = remaining.lastIndexOf('\n\n', MAX_TIDY_CHARS);
+    if (end >= preferredBoundary) {
+      end += 2;
+    } else {
+      end = remaining.lastIndexOf('\n', MAX_TIDY_CHARS);
+      if (end >= preferredBoundary) end += 1;
+      else end = MAX_TIDY_CHARS;
+    }
+    chunks.push(remaining.slice(0, end).trim());
+    remaining = remaining.slice(end);
+  }
+  if (remaining.trim()) chunks.push(remaining.trim());
+  return chunks;
+}
 
 export function isOrganizeConfigured() {
   return isLLMConfigured();
@@ -55,7 +77,7 @@ export async function tidyMarkdown({ title = '', content = '' }) {
   }
   const body = (content || '').trim();
   if (!body) return '';
-  const clipped = body.slice(0, MAX_TIDY_CHARS);
+  const chunks = splitTidyContent(body);
 
   const system =
     'Format the raw text as clean, well-structured Markdown. ' +
@@ -64,18 +86,24 @@ export async function tidyMarkdown({ title = '', content = '' }) {
     'Fix obvious typos, punctuation, and excess blank lines while preserving the original tone. ' +
     SINGLE_SOURCE_LANGUAGE_RULE + ' ' +
     'Return only the Markdown body without wrapping the entire response in a code fence.';
-  const user = `Title: ${title || '(none)'}\n\nRaw content:\n${clipped}`;
-
-  const text = await chat(
-    [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    { temperature: 0.2, timeoutMs: LONG_TIMEOUT_MS },
-  );
-  const out = stripCodeFence(text);
-  if (!out) throw new Error('模型未返回整理结果');
-  return out;
+  const outputs = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const part = chunks.length > 1
+      ? `\nPart ${index + 1} of ${chunks.length}. Format only this part; do not add a document title or continuation note.`
+      : '';
+    const user = `Title: ${title || '(none)'}${part}\n\nRaw content:\n${chunks[index]}`;
+    const text = await chat(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      { temperature: 0.2, timeoutMs: LONG_TIMEOUT_MS },
+    );
+    const out = stripCodeFence(text);
+    if (!out) throw new Error(`模型未返回第 ${index + 1}/${chunks.length} 段整理结果`);
+    outputs.push(out);
+  }
+  return outputs.join('\n\n');
 }
 
 /**
@@ -128,7 +156,11 @@ export async function tidyAndSet(path) {
 async function collectCategoryNotes(category) {
   const notes = await getAllNotes();
   const members = notes
-    .filter((n) => !isDigest(n) && normalizeCategoryList(n.data.categories).includes(category))
+    .filter((n) => (
+      contentKind(n.data) === CONTENT_KINDS.NOTE
+      && !isDigest(n)
+      && normalizeCategoryList(n.data.categories).includes(category)
+    ))
     .map((n) => {
       const name = n.path.split('/').pop().replace(/\.md$/, '');
       const date = (n.data.savedAt || n.data.date || '').toString()
@@ -250,7 +282,7 @@ export async function synthesizeSelection(paths, { title = '' } = {}) {
   for (const p of list) {
     let note;
     try { note = await readNote(p); } catch { continue; }
-    if (isDigest(note)) continue; // don't summarize existing summaries
+    if (isDigest(note) || contentKind(note.data) !== CONTENT_KINDS.NOTE) continue;
     const name = note.path.split('/').pop().replace(/\.md$/, '');
     const date = (note.data.savedAt || note.data.date || '').toString();
     normalizeCategoryList(note.data.categories).forEach((c) => catSet.add(c));

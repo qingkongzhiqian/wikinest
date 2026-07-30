@@ -93,9 +93,39 @@ export function llmConfig() {
   };
 }
 
-export function isLLMConfigured() {
-  const c = llmConfig();
-  return Boolean(c.baseUrl && c.apiKey && c.model);
+function resolvedLlmConfig(override) {
+  if (!override || typeof override !== 'object') return llmConfig();
+  const baseUrl = typeof override.baseUrl === 'string'
+    ? override.baseUrl.trim().replace(/\/+$/, '')
+    : '';
+  const apiKey = typeof override.apiKey === 'string' ? override.apiKey.trim() : '';
+  const model = typeof override.model === 'string' ? override.model.trim() : '';
+  if (baseUrl) {
+    let parsed;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      throw new Error('LLM Base URL 无效');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error('LLM Base URL 必须使用 HTTP 或 HTTPS');
+    }
+  }
+  return {
+    baseUrl,
+    apiKey: apiKey.slice(0, 8_000),
+    model: model.slice(0, 200),
+    timeoutMs: Number(override.timeoutMs) || 15000,
+  };
+}
+
+export function isLLMConfigured(override) {
+  try {
+    const c = resolvedLlmConfig(override);
+    return Boolean(c.baseUrl && c.apiKey && c.model);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -106,11 +136,11 @@ export function isLLMConfigured() {
  * @param {number} [opts.timeoutMs]  overrides the env default (long tasks want more)
  * @returns {Promise<string>}
  */
-export async function chat(messages, { temperature = 0.3, timeoutMs } = {}) {
-  if (!isLLMConfigured()) {
+export async function chat(messages, { temperature = 0.3, timeoutMs, config } = {}) {
+  if (!isLLMConfigured(config)) {
     throw new Error('LLM 未配置:请设置 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL');
   }
-  const c = llmConfig();
+  const c = resolvedLlmConfig(config);
   const budget = timeoutMs || c.timeoutMs;
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), budget);
