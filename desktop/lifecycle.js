@@ -106,11 +106,20 @@ export function createDesktopShutdownController({
   persistVault,
   onDecision = () => {},
   resumeSync = async () => true,
+  forceStopSync = async () => true,
   onResumeFailure = async () => {},
   canShowConfirmation = () => true,
 } = {}) {
   for (const [name, value] of Object.entries({
-    flushEditor, stopSync, confirmContinue, quit, relaunch, persistVault, resumeSync, onResumeFailure,
+    flushEditor,
+    stopSync,
+    confirmContinue,
+    quit,
+    relaunch,
+    persistVault,
+    resumeSync,
+    forceStopSync,
+    onResumeFailure,
   })) {
     if (typeof value !== 'function') throw new TypeError(`${name} is required`);
   }
@@ -125,14 +134,17 @@ export function createDesktopShutdownController({
         return false;
       }
       const stopped = await stopSync();
-      if (!stopped && !(await confirm({ kind, code: 'SYNC_STOP_TIMEOUT' }))) {
-        try {
-          if (await resumeSync()) return false;
-        } catch {
-          // The error is reported below as a recoverability failure.
+      if (!stopped) {
+        if (!(await confirm({ kind, code: 'SYNC_STOP_TIMEOUT' }))) {
+          try {
+            if (await resumeSync()) return false;
+          } catch {
+            // The error is reported below as a recoverability failure.
+          }
+          await onResumeFailure({ kind, code: 'SYNC_RESUME_FAILED' });
+          return false;
         }
-        await onResumeFailure({ kind, code: 'SYNC_RESUME_FAILED' });
-        return false;
+        if (!(await forceStopSync())) return false;
       }
       onDecision({ kind, vaultDir });
       if (kind === 'vault') {

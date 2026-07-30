@@ -105,6 +105,27 @@ test('S3 put, head, and delete use prefixed keys', async () => {
   assert.equal(client.calls[0].input.ContentType, 'application/octet-stream');
 });
 
+test('S3 putIfAbsent uses an atomic precondition and maps 412 to false', async () => {
+  let attempt = 0;
+  const client = fakeClient((command) => {
+    attempt += 1;
+    if (attempt === 1) return {};
+    const error = new Error('Precondition Failed');
+    error.name = 'PreconditionFailed';
+    error.$metadata = { httpStatusCode: 412 };
+    throw error;
+  });
+  const s3 = createS3Adapter({ bucket: 'bucket', prefix: 'sync' }, { client });
+
+  assert.equal(await s3.putIfAbsent('v1/meta.json', Buffer.from('first'), {
+    contentType: 'application/json',
+  }), true);
+  assert.equal(await s3.putIfAbsent('v1/meta.json', Buffer.from('second')), false);
+  assert.equal(client.calls[0].input.IfNoneMatch, '*');
+  assert.equal(client.calls[1].input.IfNoneMatch, '*');
+  assert.equal(client.calls[0].input.ContentType, 'application/json');
+});
+
 test('S3 adapter rejects escaping keys without sending requests', async () => {
   const client = fakeClient(() => ({}));
   const s3 = createS3Adapter({ bucket: 'bucket', prefix: 'sync' }, { client });

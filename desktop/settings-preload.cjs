@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('wikiSettings', {
   save: (data) => ipcRenderer.invoke('settings:save', data),
   close: () => ipcRenderer.invoke('settings:close'),
   chooseVault: () => ipcRenderer.invoke('settings:chooseVault'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   syncGet: () => ipcRenderer.invoke('sync:get'),
   syncSave: (data) => ipcRenderer.invoke('sync:save', data),
   syncTest: (data) => ipcRenderer.invoke('sync:test', data),

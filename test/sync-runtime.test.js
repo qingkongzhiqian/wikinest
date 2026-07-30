@@ -236,6 +236,52 @@ test('all triggers share one in-flight sync and a later interval retries after f
   assert.equal(ctx.runtime.getStatus().state, 'synced');
 });
 
+test('syncNow waits for reconfigure and runs on the replacement engine', async () => {
+  const oldFinalEntered = deferred();
+  const releaseOldFinal = deferred();
+  let engineCount = 0;
+  let firstAttempts = 0;
+  const runtime = createDesktopSyncRuntime({
+    stateRoot: '/state',
+    createRemote: (config) => ({ namespaceId: config.prefix }),
+    createStateStore: () => ({}),
+    createLocal: () => ({}),
+    setMutationObserver: () => () => {},
+    createEngine: () => {
+      engineCount += 1;
+      const engineId = engineCount;
+      return {
+        async sync() {
+          if (engineId === 1) {
+            firstAttempts += 1;
+            if (firstAttempts === 2) {
+              oldFinalEntered.resolve();
+              await releaseOldFinal.promise;
+            }
+          }
+          return { engineId };
+        },
+        close: () => {},
+      };
+    },
+  });
+  await runtime.start({ vaultDir: '/vault', config: CONFIG });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const reconfiguring = runtime.reconfigure({
+    vaultDir: '/vault',
+    config: { ...CONFIG, prefix: 'replacement/' },
+  });
+  await oldFinalEntered.promise;
+  const manual = runtime.syncNow();
+  releaseOldFinal.resolve();
+
+  await reconfiguring;
+  const result = await manual;
+  await runtime.stop();
+  assert.deepEqual(result, { engineId: 2 });
+});
+
 test('stop clears scheduling and observer, waits for final sync, and closes engine', async () => {
   const last = deferred();
   let attempts = 0;
@@ -268,6 +314,21 @@ test('stop returns false after 15 seconds instead of blocking forever', async ()
   assert.equal(await stopping, false);
   assert.equal(ctx.timers.intervalCount(), 0);
   assert.equal(ctx.observer(), null);
+});
+
+test('forceStop closes a timed-out engine before shutdown may continue', async () => {
+  const never = deferred();
+  const ctx = setup({ sync: () => never.promise });
+  await ctx.runtime.start({ vaultDir: '/vault', config: CONFIG });
+  const stopping = ctx.runtime.stop();
+  await Promise.resolve();
+  ctx.timers.fireTimeout(15_000);
+  assert.equal(await stopping, false);
+
+  assert.equal(await ctx.runtime.forceStop(), true);
+  assert.ok(ctx.calls.includes('close'));
+  assert.equal(ctx.runtime.getStatus().state, 'stopped');
+  await assert.rejects(ctx.runtime.syncNow(), /not active/i);
 });
 
 test('resume restores one observer and interval after timed-out stop without rebuilding the engine', async () => {

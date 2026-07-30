@@ -12,6 +12,16 @@ import {
 import { createSegment, encodeSegment } from '../src/core/sync/protocol.js';
 import { encodeBlob, openSyncMeta } from '../src/core/sync/crypto.js';
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function notFound(key) {
   const error = new Error(`NoSuchKey: ${key}`);
   error.name = 'NoSuchKey';
@@ -42,6 +52,12 @@ function createMemoryRemote() {
     async put(key, body) {
       if (offline) throw new Error('offline');
       objects.set(key, Buffer.from(body));
+    },
+    async putIfAbsent(key, body) {
+      if (offline) throw new Error('offline');
+      if (objects.has(key)) return false;
+      objects.set(key, Buffer.from(body));
+      return true;
     },
     async head(key) {
       if (offline) throw new Error('offline');
@@ -366,17 +382,110 @@ test('错误密码和明加密模式不匹配失败', async () => {
 
 test('meta 初始化后重读，检测并发初始化串库', async () => {
   const remote = createMemoryRemote();
-  const originalPut = remote.put;
-  remote.put = async (key, body) => {
-    await originalPut.call(remote, key, body);
-    if (key === 'v1/meta.json') {
+  const originalPutIfAbsent = remote.putIfAbsent;
+  remote.putIfAbsent = async (key, body) => {
+    const created = await originalPutIfAbsent.call(remote, key, body);
+    if (created && key === 'v1/meta.json') {
       const foreign = JSON.parse(Buffer.from(body).toString('utf8'));
       foreign.vaultId = 'foreign-vault';
       remote.objects.set(key, Buffer.from(JSON.stringify(foreign)));
     }
+    return created;
   };
   const a = await makeDevice(remote, { vaultId: 'our-vault', deviceId: 'device-a' });
   await assert.rejects(a.engine.sync(), /vault|metadata|concurrent/i);
+});
+
+test('双设备并发初始化空远端时仅一个 meta 条件写成功', async () => {
+  const remote = createMemoryRemote();
+  const originalPut = remote.put;
+  const originalPutIfAbsent = remote.putIfAbsent;
+  let unconditionalMetaWrites = 0;
+  let conditionalMetaWrites = 0;
+  remote.put = async (key, body, options) => {
+    if (key === 'v1/meta.json') unconditionalMetaWrites += 1;
+    return originalPut.call(remote, key, body, options);
+  };
+  remote.putIfAbsent = async (key, body, options) => {
+    if (key === 'v1/meta.json') conditionalMetaWrites += 1;
+    return originalPutIfAbsent.call(remote, key, body, options);
+  };
+  const originalGet = remote.get;
+  let missingReads = 0;
+  let releaseMissingReads;
+  const bothMissing = new Promise((resolve) => { releaseMissingReads = resolve; });
+  remote.get = async (key) => {
+    if (key === 'v1/meta.json' && !remote.objects.has(key)) {
+      missingReads += 1;
+      if (missingReads === 2) releaseMissingReads();
+      await bothMissing;
+      throw notFound(key);
+    }
+    return originalGet.call(remote, key);
+  };
+  const first = await makeDevice(remote, {
+    vaultId: 'first-vault',
+    deviceId: 'device-first',
+  });
+  const second = await makeDevice(remote, {
+    vaultId: 'second-vault',
+    deviceId: 'device-second',
+  });
+
+  const results = await Promise.allSettled([first.engine.sync(), second.engine.sync()]);
+
+  assert.equal(results.filter(({ status }) => status === 'fulfilled').length, 1);
+  assert.equal(results.filter(({ status }) => status === 'rejected').length, 1);
+  assert.match(results.find(({ status }) => status === 'rejected').reason.message, /vault|metadata|concurrent/i);
+  const meta = JSON.parse(remote.objects.get('v1/meta.json').toString('utf8'));
+  assert.ok(['first-vault', 'second-vault'].includes(meta.vaultId));
+  assert.equal(conditionalMetaWrites, 2);
+  assert.equal(unconditionalMetaWrites, 0);
+});
+
+test('close prevents an in-flight sync from writing local state after its current remote read', async () => {
+  const remote = createMemoryRemote();
+  const owner = await makeDevice(remote, { vaultId: 'vault-test', deviceId: 'owner' });
+  await owner.engine.sync();
+  const entered = deferred();
+  const release = deferred();
+  let blockMeta = true;
+  const blockedRemote = {
+    ...remote,
+    async get(key) {
+      if (blockMeta && key === 'v1/meta.json') {
+        blockMeta = false;
+        entered.resolve();
+        await release.promise;
+      }
+      return remote.get(key);
+    },
+  };
+  let stateWrites = 0;
+  let localScans = 0;
+  const engine = createSyncEngine({
+    vaultId: 'vault-test',
+    deviceId: 'joining',
+    remote: blockedRemote,
+    stateStore: {
+      load: async () => null,
+      save: async () => { stateWrites += 1; },
+    },
+    local: {
+      scan: async () => { localScans += 1; return []; },
+      applyRaw: async () => {},
+      deleteRaw: async () => {},
+    },
+  });
+
+  const syncing = engine.sync();
+  await entered.promise;
+  engine.close();
+  release.resolve();
+
+  await assert.rejects(syncing, /closed|cancel|abort/i);
+  assert.equal(stateWrites, 0);
+  assert.equal(localScans, 0);
 });
 
 test('离线失败保留可重试状态，恢复后成功', async () => {

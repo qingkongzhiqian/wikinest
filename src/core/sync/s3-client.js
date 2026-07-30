@@ -60,6 +60,12 @@ async function bodyToBuffer(body) {
   throw new Error('unsupported S3 body type');
 }
 
+function isPreconditionFailed(error) {
+  return error?.name === 'PreconditionFailed'
+    || error?.code === 'PreconditionFailed'
+    || error?.$metadata?.httpStatusCode === 412;
+}
+
 export function createS3Adapter(config, { client: injectedClient } = {}) {
   if (!config || typeof config !== 'object') throw new Error('S3 config is required');
   nonEmptyString(config.bucket, 'bucket');
@@ -127,6 +133,22 @@ export function createS3Adapter(config, { client: injectedClient } = {}) {
     }));
   }
 
+  async function putIfAbsent(relativeKey, body, { contentType } = {}) {
+    try {
+      await client.send(new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey(relativeKey),
+        Body: Buffer.from(body),
+        IfNoneMatch: '*',
+        ...(contentType ? { ContentType: contentType } : {}),
+      }));
+      return true;
+    } catch (error) {
+      if (isPreconditionFailed(error)) return false;
+      throw error;
+    }
+  }
+
   async function head(relativeKey) {
     return client.send(new HeadObjectCommand({
       Bucket: config.bucket,
@@ -172,6 +194,7 @@ export function createS3Adapter(config, { client: injectedClient } = {}) {
     list,
     get,
     put,
+    putIfAbsent,
     head,
     delete: remove,
     testConnection,

@@ -161,7 +161,7 @@ export function createDesktopSyncRuntime({
     return true;
   }
 
-  async function stopNow() {
+  function clearTriggers() {
     if (interval !== null) {
       timers.clearInterval(interval);
       interval = null;
@@ -172,6 +172,10 @@ export function createDesktopSyncRuntime({
     }
     unregister?.();
     unregister = null;
+  }
+
+  async function stopNow() {
+    clearTriggers();
     if (!generation) {
       updateStatus('disabled');
       return true;
@@ -217,6 +221,21 @@ export function createDesktopSyncRuntime({
     return clean;
   }
 
+  async function forceStopNow() {
+    clearTriggers();
+    if (!generation) {
+      updateStatus('stopped');
+      return true;
+    }
+    const active = generation;
+    active.rerunRequested = false;
+    active.stopTimedOut = false;
+    active.engine.close?.();
+    if (generation === active) generation = null;
+    updateStatus('stopped');
+    return true;
+  }
+
   function serialize(operation) {
     const result = lifecycle.then(operation, operation);
     lifecycle = result.catch(() => {});
@@ -228,7 +247,7 @@ export function createDesktopSyncRuntime({
       return serialize(() => startNow(options));
     },
     syncNow() {
-      return runSync();
+      return serialize(() => runSync());
     },
     reconfigure(options) {
       return serialize(async () => {
@@ -239,6 +258,9 @@ export function createDesktopSyncRuntime({
     },
     stop() {
       return serialize(stopNow);
+    },
+    forceStop() {
+      return serialize(forceStopNow);
     },
     resume() {
       return serialize(resumeNow);

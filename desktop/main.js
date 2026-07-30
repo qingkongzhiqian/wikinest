@@ -1,4 +1,6 @@
-import { app, BrowserWindow, dialog, Menu, ipcMain, safeStorage } from 'electron';
+import {
+  app, BrowserWindow, dialog, Menu, ipcMain, safeStorage, shell,
+} from 'electron';
 import Store from 'electron-store';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -342,6 +344,21 @@ createSettingsIpcHandlers({
   },
 });
 
+ipcMain.handle('app:open-external', async (event, value) => {
+  assertTrustedSender(event);
+  let target;
+  try {
+    target = new URL(value);
+  } catch {
+    throw new Error('invalid external URL');
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    throw new Error('external URL must use HTTP or HTTPS');
+  }
+  await shell.openExternal(target.href);
+  return { ok: true };
+});
+
 app.whenReady().then(async () => {
   syncLocaleToEnv(readLocale(store));
   syncRuntime = createDesktopSyncRuntime({
@@ -368,6 +385,15 @@ app.whenReady().then(async () => {
         return await syncRuntime.stop();
       } catch (error) {
         console.error('sync stop before shutdown failed:', error.message);
+        return false;
+      }
+    },
+    forceStopSync: async () => {
+      if (!syncRuntime) return true;
+      try {
+        return await syncRuntime.forceStop();
+      } catch (error) {
+        console.error('sync force-stop before shutdown failed:', error.message);
         return false;
       }
     },

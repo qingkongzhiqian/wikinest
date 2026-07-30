@@ -167,6 +167,22 @@ test('quit flushes, then stops sync, then quits exactly once', async () => {
   assert.deepEqual(events, ['flush', 'stop', 'quit']);
 });
 
+test('continuing after a sync stop timeout force-closes sync before quitting', async () => {
+  const events = [];
+  const controller = createDesktopShutdownController({
+    flushEditor: async () => { events.push('flush'); return { ok: true, code: 'OK' }; },
+    stopSync: async () => { events.push('stop'); return false; },
+    forceStopSync: async () => { events.push('force-stop'); return true; },
+    confirmContinue: async () => { events.push('confirm'); return true; },
+    quit: () => events.push('quit'),
+    relaunch: () => events.push('relaunch'),
+    persistVault: () => events.push('persist'),
+  });
+
+  assert.equal(await controller.quit(), true);
+  assert.deepEqual(events, ['flush', 'stop', 'confirm', 'force-stop', 'quit']);
+});
+
 test('sync stop cancel waits for resume and reports a failed resume without exiting', async () => {
   const events = [];
   const controller = createDesktopShutdownController({

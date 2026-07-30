@@ -449,7 +449,7 @@ export function createSyncEngine({
   if (typeof password !== 'string') throw new Error('password must be a string');
   for (const [value, label, methods] of [
     [local, 'local adapter', ['scan', 'applyRaw', 'deleteRaw']],
-    [remote, 'remote adapter', ['list', 'get', 'put']],
+    [remote, 'remote adapter', ['list', 'get', 'put', 'putIfAbsent']],
     [stateStore, 'state store', ['load', 'save']],
   ]) {
     if (!value || methods.some((method) => typeof value[method] !== 'function')) {
@@ -460,6 +460,13 @@ export function createSyncEngine({
   let status = Object.freeze({ state: 'pending', error: null });
   let inFlight = null;
   let closed = false;
+
+  function assertOpen() {
+    if (!closed) return;
+    const error = new Error('sync engine is closed');
+    error.code = 'SYNC_ENGINE_CLOSED';
+    throw error;
+  }
 
   function setStatus(state, error = null) {
     status = Object.freeze({ state, error });
@@ -483,8 +490,10 @@ export function createSyncEngine({
     let created = false;
     try {
       bytes = await remote.get(META_KEY);
+      assertOpen();
     } catch (error) {
       if (!isNotFound(error)) throw error;
+      assertOpen();
       const selectedVaultId = vaultId
         ?? state.vaultId
         ?? (remote.namespaceId ? sha256(String(remote.namespaceId)) : null);
@@ -496,11 +505,13 @@ export function createSyncEngine({
         .digest()
         .subarray(0, 16);
       const candidate = await createSyncMeta({ vaultId: selectedVaultId, password, salt });
-      await remote.put(META_KEY, Buffer.from(JSON.stringify(candidate)), {
+      assertOpen();
+      created = await remote.putIfAbsent(META_KEY, Buffer.from(JSON.stringify(candidate)), {
         contentType: 'application/json',
       });
-      created = true;
+      assertOpen();
       bytes = await remote.get(META_KEY);
+      assertOpen();
     }
     let meta;
     try {
@@ -519,6 +530,7 @@ export function createSyncEngine({
     }
     if (state.vaultId !== opened.meta.vaultId) {
       state.vaultId = opened.meta.vaultId;
+      assertOpen();
       await stateStore.save(state);
     }
     return opened;
@@ -528,6 +540,7 @@ export function createSyncEngine({
     let latestMeta;
     try {
       latestMeta = JSON.parse(Buffer.from(await remote.get(META_KEY)).toString('utf8'));
+      assertOpen();
     } catch (error) {
       throw new Error('remote metadata changed or became invalid during sync', { cause: error });
     }
@@ -562,6 +575,7 @@ export function createSyncEngine({
   async function reconcileMaterializing(state) {
     if (!state.materializing) return;
     const current = scanMap(await local.scan());
+    assertOpen();
     const baseline = state.materializing.baseline ?? {};
     const desired = state.materializing.desired ?? {};
     const reconciled = {};
@@ -583,12 +597,14 @@ export function createSyncEngine({
     }
     state.tracked = reconciled;
     state.materializing = null;
+    assertOpen();
     await stateStore.save(state);
   }
 
   async function formPending(state, cryptoContext) {
     if (state.pending) return;
     const current = scanMap(await local.scan());
+    assertOpen();
 
     const removed = Object.entries(state.tracked)
       .filter(([trackedPath]) => !current.has(trackedPath))
@@ -703,23 +719,29 @@ export function createSyncEngine({
       };
     }
     for (const revision of localRevisions) state.revisions[revision.revisionId] = revision;
+    assertOpen();
     await stateStore.save(state);
   }
 
   async function uploadPending(state, cryptoContext, opened) {
     if (!state.pending) return 0;
     await assertRemoteMetaUnchanged(opened);
+    assertOpen();
     for (const [hash, base64] of Object.entries(state.pending.blobs)) {
       const body = Buffer.from(base64, 'base64');
       if (sha256(body) !== hash) throw new Error(`pending blob SHA-256 mismatch: ${hash}`);
       await remote.put(`${BLOB_PREFIX}/${hash}`, body, {
         contentType: 'application/octet-stream',
       });
+      assertOpen();
     }
     await assertRemoteMetaUnchanged(opened);
+    assertOpen();
     const encoded = Buffer.from(state.pending.segmentBody, 'base64');
     await remote.put(state.pending.key, encoded, { contentType: 'application/json' });
+    assertOpen();
     const readBack = Buffer.from(await remote.get(state.pending.key));
+    assertOpen();
     if (!readBack.equals(encoded)) {
       throw new Error(`segment read-back mismatch after PUT: ${state.pending.key}`);
     }
@@ -744,17 +766,20 @@ export function createSyncEngine({
     state.seenSegments[state.pending.key] = true;
     state.nextSequence += 1;
     state.pending = null;
+    assertOpen();
     await stateStore.save(state);
     return 1;
   }
 
   async function pullSegments(state, cryptoContext) {
     const keys = (await remote.list(LOG_PREFIX)).sort(compareStrings);
+    assertOpen();
     let downloaded = 0;
     for (const key of keys) {
       if (state.seenSegments[key]) continue;
       const route = parseSegmentKey(key);
       const segment = decodeSegment(await remote.get(key), cryptoContext);
+      assertOpen();
       if (route.deviceId !== segment.deviceId || route.sequence !== segment.sequence) {
         throw new Error(`segment routing mismatch for ${key}`);
       }
@@ -768,6 +793,7 @@ export function createSyncEngine({
       }
       validateRevisionGraph(candidateRevisions);
       const candidateSeenSegments = { ...state.seenSegments, [key]: true };
+      assertOpen();
       await stateStore.save({
         ...state,
         revisions: candidateRevisions,
@@ -813,6 +839,7 @@ export function createSyncEngine({
     const prepared = new Map();
     for (const [target, candidate] of desired) {
       const stored = await remote.get(`${BLOB_PREFIX}/${candidate.revision.blob}`);
+      assertOpen();
       const actualHash = sha256(stored);
       if (actualHash !== candidate.revision.blob) {
         throw new Error(
@@ -824,6 +851,7 @@ export function createSyncEngine({
     }
 
     const current = scanMap(await local.scan());
+    assertOpen();
     const localHashes = new Map([...current].map(([notePath, item]) => [notePath, item.contentHash]));
     const baseline = clone(state.tracked);
     const desiredTracked = {};
@@ -836,14 +864,17 @@ export function createSyncEngine({
       };
     }
     state.materializing = { baseline, desired: clone(desiredTracked), localChanged: {} };
+    assertOpen();
     await stateStore.save(state);
 
     async function materializeMutation(notePath, operation) {
       try {
+        assertOpen();
         return await operation();
       } catch (error) {
         if (error?.code === 'LOCAL_CHANGED_DURING_SYNC') {
           state.materializing.localChanged[notePath] = true;
+          assertOpen();
           await stateStore.save(state);
         }
         throw error;
@@ -885,6 +916,7 @@ export function createSyncEngine({
     }
     state.tracked = tracked;
     state.materializing = null;
+    assertOpen();
     await stateStore.save(state);
   }
 
@@ -892,22 +924,30 @@ export function createSyncEngine({
     setStatus('syncing');
     try {
       const state = await loadState();
+      assertOpen();
       const opened = await openRemote(state);
+      assertOpen();
       const activeVaultId = opened.meta.vaultId;
       const cryptoContext = { key: opened.key, vaultId: activeVaultId };
       await reconcileMaterializing(state);
+      assertOpen();
       let uploadedSegments = 0;
       for (let attempts = 0; attempts < 16; attempts += 1) {
         await formPending(state, cryptoContext);
+        assertOpen();
         if (!state.pending) break;
         uploadedSegments += await uploadPending(state, cryptoContext, opened);
+        assertOpen();
       }
       await formPending(state, cryptoContext);
+      assertOpen();
       if (state.pending) {
         throw new Error('local changes did not stabilize during sync; pending upload retained');
       }
       const downloadedSegments = await pullSegments(state, cryptoContext);
+      assertOpen();
       await materialize(state, cryptoContext);
+      assertOpen();
       const result = Object.freeze({ uploadedSegments, downloadedSegments });
       setStatus('synced');
       return result;
