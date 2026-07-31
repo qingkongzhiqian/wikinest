@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Wikinest 网页助手",
+  "version": "0.1.0",
+  "description": "Collect bookmarks and review web clips before saving them to Wikinest.",
+  "permissions": [
+    "activeTab",
+    "contextMenus",
+    "sidePanel",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:4321/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "收藏到 Wikinest"
+  },
+  "side_panel": {
+    "default_path": "side-panel.html"
+  },
+  "commands": {
+    "save-bookmark": {
+      "suggested_key": {
+        "default": "Alt+Shift+B",
+        "mac": "Command+Shift+B"
+      },
+      "description": "收藏当前网址"
+    },
+    "clip-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+C",
+        "mac": "Command+Shift+C"
+      },
+      "description": "剪藏当前选区"
+    }
+  }
+}

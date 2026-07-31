@@ -33,8 +33,17 @@
     border-radius: 7px; font: inherit;
   }
   input:focus, select:focus { outline: 2px solid #0a84ff; outline-offset: 0; border-color: #0a84ff; }
+  input[type="checkbox"] { width: auto; margin: 2px 0 0; }
   .hint { font-size: 12px; color: #86868b; margin-top: 4px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 12px; }
+  .check label { margin: 0; }
+  .warning {
+    border: 1px solid #e6b84a; border-radius: 7px; padding: 9px 10px;
+    background: #fff8df; color: #704f00; margin-bottom: 12px;
+  }
+  .sync-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  #syncStatus { color: #86868b; font-size: 13px; margin-bottom: 10px; white-space: pre-line; }
   footer {
     position: fixed; left: 0; right: 0; bottom: 0;
     display: flex; align-items: center; gap: 12px;
@@ -50,6 +59,7 @@
   .primary { background: #0a84ff; color: #fff; }
   .primary:hover { background: #0060df; }
   .ghost { background: transparent; border-color: #c7c7cc; color: inherit; }
+  button:disabled { opacity: .45; cursor: default; }
   #status { color: #86868b; font-size: 13px; }
   code { background: rgba(120,120,128,.16); padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -159,11 +169,69 @@
     </div>
   </fieldset>
 
+  <fieldset id="syncSettings">
+    <legend data-i18n="sync.title">Vault 双向同步（S3 兼容）</legend>
+    <p class="hint" style="margin-top:0" data-i18n="sync.note">独立于图片存储，同步 Vault 笔记。凭据安全保存在本机。</p>
+    <div class="check">
+      <input id="SYNC_ENABLED" type="checkbox" />
+      <label for="SYNC_ENABLED" data-i18n="sync.enabled">启用 Vault 同步</label>
+    </div>
+    <div class="grid2">
+      <div class="row">
+        <label for="SYNC_BUCKET" data-i18n="sync.bucket">Bucket</label>
+        <input id="SYNC_BUCKET" />
+      </div>
+      <div class="row">
+        <label for="SYNC_ENDPOINT" data-i18n="sync.endpoint">Endpoint</label>
+        <input id="SYNC_ENDPOINT" placeholder="https://s3.example.com" />
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="row">
+        <label for="SYNC_REGION" data-i18n="sync.region">Region</label>
+        <input id="SYNC_REGION" value="auto" />
+      </div>
+      <div class="row">
+        <label for="SYNC_PREFIX" data-i18n="sync.prefix">Key prefix</label>
+        <input id="SYNC_PREFIX" value="wikinest-sync/" />
+      </div>
+    </div>
+    <div class="check">
+      <input id="SYNC_FORCE_PATH_STYLE" type="checkbox" />
+      <label for="SYNC_FORCE_PATH_STYLE" data-i18n="sync.pathStyle">使用 Path-style 访问</label>
+    </div>
+    <div class="grid2">
+      <div class="row">
+        <label for="SYNC_ACCESS_KEY_ID" data-i18n="sync.accessKeyId">Access Key ID</label>
+        <input id="SYNC_ACCESS_KEY_ID" autocomplete="off" />
+      </div>
+      <div class="row">
+        <label for="SYNC_SECRET_ACCESS_KEY" data-i18n="sync.secretAccessKey">Secret Access Key</label>
+        <input id="SYNC_SECRET_ACCESS_KEY" type="password" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="row">
+      <label for="SYNC_PASSWORD" data-i18n="sync.password">可选同步密码</label>
+      <input id="SYNC_PASSWORD" type="password" autocomplete="new-password" />
+    </div>
+    <div id="syncPlaintextWarning" class="warning" role="alert" data-i18n="sync.plaintextWarning">未设置同步密码，远端笔记内容将以明文保存。</div>
+    <div class="check">
+      <input id="SYNC_CLEAR_PASSWORD" type="checkbox" />
+      <label for="SYNC_CLEAR_PASSWORD" data-i18n="sync.clearPassword">清除已保存同步密码（仅限新的空 prefix）</label>
+    </div>
+    <p class="hint" data-i18n="sync.modeLocked">远端 prefix 初始化后，明文与加密模式不可切换。</p>
+    <div class="sync-actions">
+      <button class="ghost" id="syncTest" type="button" data-i18n="sync.test">测试连接</button>
+      <button class="ghost" id="syncNow" type="button" data-i18n="sync.now">立即同步</button>
+    </div>
+    <div id="syncStatus" role="status" aria-live="polite"></div>
+  </fieldset>
+
   <footer>
     <span id="status"></span>
     <span class="spacer"></span>
-    <button class="ghost" id="cancel" data-i18n="app.cancel">取消</button>
-    <button class="primary" id="save" data-i18n="app.save">保存</button>
+    <button class="ghost" id="cancel" type="button" data-i18n="app.cancel">取消</button>
+    <button class="primary" id="save" type="button" data-i18n="app.save">保存</button>
   </footer>
 
 <script>
@@ -174,6 +242,9 @@
     'S3_ENDPOINT','S3_REGION','S3_KEY_PREFIX','S3_FORCE_PATH_STYLE',
   ];
   let uiMessages = {};
+  let syncHasPassword = false;
+  let syncSavedEnabled = false;
+  let lastSyncState = null;
 
   function tr(key, params = {}) {
     const template = uiMessages[key] || key;
@@ -192,6 +263,91 @@
     });
   }
 
+  function buildSyncPayload() {
+    const text = (id, fallback = '') =>
+      (document.getElementById(id)?.value || '').trim() || fallback;
+    const payload = {
+      enabled: document.getElementById('SYNC_ENABLED').checked,
+      bucket: text('SYNC_BUCKET'),
+      prefix: text('SYNC_PREFIX', 'wikinest-sync/'),
+      endpoint: text('SYNC_ENDPOINT'),
+      region: text('SYNC_REGION', 'auto'),
+      forcePathStyle: document.getElementById('SYNC_FORCE_PATH_STYLE').checked,
+      accessKeyId: text('SYNC_ACCESS_KEY_ID'),
+    };
+    const secretAccessKey = text('SYNC_SECRET_ACCESS_KEY');
+    const password = text('SYNC_PASSWORD');
+    if (secretAccessKey) payload.secretAccessKey = secretAccessKey;
+    const clearPassword = document.getElementById('SYNC_CLEAR_PASSWORD').checked;
+    if (password && !clearPassword) payload.password = password;
+    if (clearPassword) payload.clearPassword = true;
+    return payload;
+  }
+
+  function updateSyncControls() {
+    const enabled = document.getElementById('SYNC_ENABLED').checked;
+    document.getElementById('syncTest').disabled = !enabled;
+    document.getElementById('syncNow').disabled = !syncSavedEnabled;
+    const passwordWillExist = Boolean(document.getElementById('SYNC_PASSWORD').value.trim())
+      || (syncHasPassword && !document.getElementById('SYNC_CLEAR_PASSWORD').checked);
+    document.getElementById('syncPlaintextWarning').hidden = !enabled || passwordWillExist;
+  }
+
+  function handleClearPasswordChange() {
+    const clearing = document.getElementById('SYNC_CLEAR_PASSWORD').checked;
+    if (clearing) document.getElementById('SYNC_PASSWORD').value = '';
+    document.getElementById('SYNC_PASSWORD').disabled = clearing;
+    updateSyncControls();
+  }
+
+  function handlePasswordInput() {
+    if (document.getElementById('SYNC_PASSWORD').value.trim()) {
+      document.getElementById('SYNC_CLEAR_PASSWORD').checked = false;
+    }
+    updateSyncControls();
+  }
+
+  function renderSyncStatus(status = {}) {
+    const state = status.state || 'disabled';
+    const lines = [tr(`sync.state.${state}`)];
+    const value = status.updatedAt || status.lastUpdated;
+    if (value) {
+      lines.push(tr('sync.lastUpdated', {
+        date: new Date(value).toLocaleString(document.documentElement.lang),
+      }));
+    }
+    if (status.error) lines.push(tr('sync.error', { message: status.error }));
+    document.getElementById('syncStatus').textContent = lines.join('\n');
+  }
+
+  function handleSyncStatus(status = {}) {
+    lastSyncState = status.state || lastSyncState;
+    renderSyncStatus(status);
+  }
+
+  function applySyncConfig(data = {}) {
+    document.getElementById('SYNC_ENABLED').checked = Boolean(data.enabled);
+    document.getElementById('SYNC_BUCKET').value = data.bucket || '';
+    document.getElementById('SYNC_ENDPOINT').value = data.endpoint || '';
+    document.getElementById('SYNC_REGION').value = data.region || 'auto';
+    document.getElementById('SYNC_PREFIX').value = data.prefix || 'wikinest-sync/';
+    document.getElementById('SYNC_FORCE_PATH_STYLE').checked = Boolean(data.forcePathStyle);
+    document.getElementById('SYNC_ACCESS_KEY_ID').value = data.accessKeyId || '';
+    document.getElementById('SYNC_SECRET_ACCESS_KEY').value = '';
+    document.getElementById('SYNC_PASSWORD').value = '';
+    document.getElementById('SYNC_PASSWORD').disabled = false;
+    document.getElementById('SYNC_CLEAR_PASSWORD').checked = false;
+    syncHasPassword = Boolean(data.hasPassword);
+    syncSavedEnabled = Boolean(data.enabled);
+    document.getElementById('SYNC_SECRET_ACCESS_KEY').placeholder = data.hasSecretAccessKey
+      ? tr('sync.secretSavedPlaceholder') : '';
+    document.getElementById('SYNC_PASSWORD').placeholder = data.hasPassword
+      ? tr('sync.passwordSavedPlaceholder') : '';
+    updateSyncControls();
+    renderSyncStatus(data.status);
+    lastSyncState = data.status?.state || null;
+  }
+
   async function load() {
     const data = await window.wikiSettings.get();
     for (const k of KEYS) {
@@ -207,6 +363,12 @@
       }
       document.getElementById('UI_LOCALE').value = info?.locale || 'en';
     } catch { /* ignore */ }
+    try {
+      applySyncConfig(await window.wikiSettings.syncGet());
+    } catch (error) {
+      document.getElementById('syncStatus').textContent =
+        tr('sync.error', { message: error.message });
+    }
   }
 
   function collect() {
@@ -216,16 +378,82 @@
     return out;
   }
 
+  document.getElementById('SYNC_ENABLED').addEventListener('change', updateSyncControls);
+  document.getElementById('SYNC_PASSWORD').addEventListener('input', handlePasswordInput);
+  document.getElementById('SYNC_CLEAR_PASSWORD').addEventListener('change', handleClearPasswordChange);
+
+  document.getElementById('syncTest').addEventListener('click', async () => {
+    const button = document.getElementById('syncTest');
+    if (button.disabled) return;
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = tr('sync.testing');
+    try {
+      const result = await window.wikiSettings.syncTest(buildSyncPayload());
+      const key = result?.mode === 'encrypted'
+        ? 'sync.testEncrypted'
+        : result?.mode === 'plaintext' ? 'sync.testPlaintext' : 'sync.testUninitialized';
+      document.getElementById('syncStatus').textContent = tr(key);
+    } catch (error) {
+      document.getElementById('syncStatus').textContent =
+        tr('sync.testFailed', { message: error.message });
+    } finally {
+      button.textContent = label;
+      updateSyncControls();
+    }
+  });
+
+  document.getElementById('syncNow').addEventListener('click', async () => {
+    const button = document.getElementById('syncNow');
+    if (button.disabled) return;
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = tr('sync.syncingNow');
+    try {
+      const result = await window.wikiSettings.syncNow();
+      if (result?.status) handleSyncStatus(result.status);
+    } catch (error) {
+      document.getElementById('syncStatus').textContent =
+        tr('sync.nowFailed', { message: error.message });
+    } finally {
+      button.textContent = label;
+      updateSyncControls();
+    }
+  });
+
   document.getElementById('save').addEventListener('click', async () => {
+    const button = document.getElementById('save');
+    if (button.disabled) return;
+    button.disabled = true;
     document.getElementById('status').textContent = tr('settings.saving');
-    const result = await window.wikiSettings.save(collect());
-    if (result?.localeChanged) location.reload();
+    let settingsSaved = false;
+    try {
+      const result = await window.wikiSettings.save(collect());
+      settingsSaved = true;
+      const syncResult = await window.wikiSettings.syncSave(buildSyncPayload());
+      if (syncResult?.config) {
+        applySyncConfig({ ...syncResult.config, status: syncResult.status });
+      }
+      if (result?.localeChanged) {
+        location.reload();
+        return;
+      }
+      window.wikiSettings.close();
+    } catch (error) {
+      document.getElementById('status').textContent =
+        settingsSaved
+          ? tr('sync.partialSaveFailed', { message: error.message })
+          : tr('settings.saveFailed', { message: error.message });
+    } finally {
+      button.disabled = false;
+    }
   });
   document.getElementById('cancel').addEventListener('click', () => window.wikiSettings.close());
   document.getElementById('chooseVault').addEventListener('click', () => {
     document.getElementById('status').textContent = tr('settings.vaultRestart');
     window.wikiSettings.chooseVault();
   });
+  window.wikiSettings.onSyncStatus(handleSyncStatus);
 
   load();
 </script>

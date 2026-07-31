@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wikinest 网页剪藏</title>
+  <link rel="stylesheet" href="side-panel.css">
+</head>
+<body>
+  <header class="topbar" aria-label="对话工具栏">
+    <div class="top-actions">
+      <button id="newChat" class="top-icon-button" type="button" aria-label="新建对话" title="新建对话">＋</button>
+      <button id="historyToggle" class="top-icon-button" type="button" aria-label="历史对话" title="历史对话">◷</button>
+      <button id="settingsToggle" class="top-icon-button" type="button" aria-label="模型设置">⚙</button>
+    </div>
+  </header>
+
+  <section id="modelSettings" class="settings-panel" hidden>
+    <div class="settings-head">
+      <div>
+        <h2>模型配置</h2>
+        <p>支持 OpenAI 兼容接口，配置仅保存在当前浏览器。</p>
+      </div>
+      <button id="settingsClose" class="icon-button" type="button" aria-label="关闭">×</button>
+    </div>
+    <label>Base URL<input id="modelBaseUrl" type="url" placeholder="https://api.openai.com/v1"></label>
+    <label>API Key<input id="modelApiKey" type="password" placeholder="sk-…"></label>
+    <label>模型<input id="modelName" type="text" placeholder="gpt-4o-mini"></label>
+    <div class="settings-actions">
+      <span id="settingsStatus"></span>
+      <button id="settingsSave" class="primary" type="button">保存配置</button>
+    </div>
+  </section>
+
+  <section id="historyPanel" class="settings-panel history-panel" hidden>
+    <div class="settings-head">
+      <div>
+        <h2>历史对话</h2>
+        <p>对话保存在当前浏览器。</p>
+      </div>
+      <button id="historyClose" class="icon-button" type="button" aria-label="关闭">×</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </section>
+
+  <main>
+    <section id="emptyState" class="empty">
+      <div class="empty-copy">
+        <h1 id="emptyTitle">你好，</h1>
+        <h2 id="emptyDetail">今天想聊点什么？</h2>
+      </div>
+      <div id="welcomeCard" class="welcome-card">
+        <strong>直接提问，或引用网页内容</strong>
+        <p>不选文字也可以正常对话；选中网页内容后，它会自动成为提问上下文。</p>
+        <span>在下方输入问题</span>
+      </div>
+      <div id="welcomeChips" class="welcome-chips">
+        <span>翻译</span><span>摘要</span><span>提取要点</span>
+      </div>
+    </section>
+
+    <div id="workspace" hidden>
+      <section class="source-card">
+        <div class="source-copy">
+          <p id="sourceDomain" class="source-domain"></p>
+          <h1 id="sourceTitle"></h1>
+          <p id="sourceMeta"></p>
+        </div>
+        <a id="sourceLink" class="source-link" target="_blank" rel="noreferrer" aria-label="打开原网页">↗</a>
+      </section>
+
+    </div>
+
+    <section id="conversation" class="conversation" hidden>
+      <div id="messageList" class="message-list"></div>
+    </section>
+  </main>
+
+  <footer id="footer">
+    <div class="actions">
+      <button data-action="translate" type="button"><span>译</span> 翻译</button>
+      <button data-action="summarize" type="button"><span>摘</span> 摘要</button>
+      <button data-action="key-points" type="button"><span>点</span> 要点</button>
+      <button data-action="explain" type="button"><span>释</span> 解释</button>
+      <select id="targetLanguage" class="language-select" aria-label="翻译目标语言">
+        <option value="Simplified Chinese">简体中文</option>
+        <option value="Traditional Chinese">繁体中文</option>
+        <option value="English">English</option>
+        <option value="Japanese">日本語</option>
+      </select>
+    </div>
+    <div class="composer">
+      <div id="quoteAttachment" class="quote-attachment" hidden>
+        <div class="quote-head">
+          <span>引用网页选区</span>
+          <span id="charCount" class="char-count"></span>
+          <button id="copyOriginal" class="quiet-button" type="button">复制</button>
+          <button id="discard" class="quote-close" type="button" aria-label="移除引用">×</button>
+        </div>
+        <blockquote id="originalPreview"></blockquote>
+        <textarea id="original" hidden readonly></textarea>
+      </div>
+      <textarea id="userPrompt" placeholder="针对引用内容提问…" rows="2"></textarea>
+      <textarea id="userNote" hidden></textarea>
+      <p id="aiStatus" role="status" aria-live="polite"></p>
+      <div class="composer-tools">
+        <div class="footer-actions">
+          <button id="saveBookmark" class="secondary" type="button">收藏网址</button>
+          <button id="save" class="secondary" type="button">保存剪藏</button>
+          <button id="ask" class="primary ask-button" type="button" aria-label="发送问题">↑</button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="side-panel.js"></script>
+</body>
+</html>

@@ -1,6 +1,15 @@
-# Wikinest — web + MCP server image.
-# Only runtime deps are installed (electron / electron-builder are devDependencies
-# and skipped via --omit=dev), keeping the image small.
+# Build the browser editor before pruning development dependencies.
+FROM node:20-alpine AS editor-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY vite.editor.config.ts tsconfig.editor.json ./
+COPY web-editor ./web-editor
+RUN npm run editor:build
+
+# Wikinest — web + MCP runtime image.
 FROM node:20-alpine
 
 WORKDIR /app
@@ -11,6 +20,7 @@ RUN npm ci --omit=dev
 
 # App source (see .dockerignore for what's excluded).
 COPY . .
+COPY --from=editor-build /app/web-dist ./web-dist
 
 ENV NODE_ENV=production
 ENV WIKI_PORT=4321

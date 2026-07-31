@@ -1,6 +1,6 @@
 {
   "name": "wikinest",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Wikinest — a local-first desktop app for your markdown personal wiki, with AI auto-organizing, MCP and RAG",
   "type": "module",
   "main": "desktop/main.js",
@@ -30,18 +30,31 @@
   "scripts": {
     "serve": "node bin/wiki.js serve",
     "mcp": "node bin/wiki.js mcp",
-    "test": "node --test 'test/**/*.test.js'",
-    "desktop": "electron desktop/main.js",
-    "dist": "electron-builder",
-    "dist:dir": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "editor:dev": "vite --config vite.editor.config.ts",
+    "editor:build": "vite build --config vite.editor.config.ts",
+    "editor:test": "vitest run --config vite.editor.config.ts",
+    "test:node": "node scripts/run-node-tests.mjs",
+    "test": "npm run editor:test && npm run editor:build && npm run test:node && node test/upload.integration.js",
+    "desktop": "npm run editor:build && electron desktop/main.js",
+    "desktop:dev": "concurrently -k \"npm:editor:dev\" \"wait-on http://127.0.0.1:5173/src/main.tsx && cross-env WIKINEST_EDITOR_DEV_URL=http://127.0.0.1:5173 electron desktop/main.js\"",
+    "dist": "npm run editor:build && electron-builder",
+    "dist:dir": "npm run editor:build && electron-builder --dir",
+    "dist:mac": "npm run editor:build && electron-builder --mac",
+    "dist:win": "npm run editor:build && electron-builder --win",
+    "dist:linux": "npm run editor:build && electron-builder --linux"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@milkdown/core": "^7.21.1",
+    "@milkdown/plugin-history": "^7.21.1",
+    "@milkdown/plugin-listener": "^7.21.1",
+    "@milkdown/preset-commonmark": "^7.21.1",
+    "@milkdown/preset-gfm": "^7.21.1",
+    "@milkdown/prose": "^7.21.1",
+    "@milkdown/react": "^7.21.1",
+    "@milkdown/utils": "^7.21.1",
     "@aws-sdk/client-s3": "^3.1080.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "electron-store": "^11.0.2",
@@ -50,11 +63,24 @@
     "highlight.js": "^11.9.0",
     "markdown-it": "^14.1.0",
     "mermaid": "^11.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
     "electron": "^41.7.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.2"
   },
   "build": {
     "appId": "com.wisefuturus.wikinest",
@@ -68,6 +94,7 @@
       "desktop/**/*",
       "src/**/*",
       "bin/**/*",
+      "web-dist/**/*",
       "package.json"
     ],
     "mac": {

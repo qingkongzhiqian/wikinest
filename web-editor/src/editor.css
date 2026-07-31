@@ -1,0 +1,327 @@
+.wikinest-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+  color: #111827;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.wikinest-editor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+.wikinest-editor__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #374151;
+}
+
+.wikinest-editor__status {
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.wikinest-editor__status.is-error,
+.wikinest-editor__status.is-conflict {
+  color: #b91c1c;
+}
+
+.wikinest-slash-menu {
+  position: fixed;
+  z-index: 100;
+  width: min(292px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid #e2e5e9;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 38px rgba(17, 24, 39, 0.14), 0 2px 8px rgba(17, 24, 39, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.wikinest-slash-menu[hidden] {
+  display: none;
+}
+
+.wikinest-slash-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #24292f;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wikinest-slash-menu__item:hover,
+.wikinest-slash-menu__item.is-selected {
+  background: #f0f2f5;
+}
+
+.wikinest-slash-menu__icon {
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 1px solid #e2e5e9;
+  border-radius: 6px;
+  color: #4b5563;
+  background: #fff;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.wikinest-slash-menu__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wikinest-slash-menu__text strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.wikinest-slash-menu__text small {
+  overflow: hidden;
+  color: #8b949e;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wikinest-editor__content {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  padding: 0 24px;
+  color: inherit;
+  background: transparent;
+}
+
+.wikinest-editor__content .ProseMirror {
+  min-height: 100%;
+  max-width: 920px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 28px 8px 96px;
+  outline: none;
+  color: #24292f;
+  font: 16px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-wrap: break-word;
+}
+
+.wikinest-editor__content .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.wikinest-editor__content .ProseMirror p {
+  margin: 0.8em 0;
+}
+
+.wikinest-editor__content .ProseMirror h1,
+.wikinest-editor__content .ProseMirror h2,
+.wikinest-editor__content .ProseMirror h3,
+.wikinest-editor__content .ProseMirror h4,
+.wikinest-editor__content .ProseMirror h5,
+.wikinest-editor__content .ProseMirror h6 {
+  margin: 1.65em 0 0.65em;
+  color: #111827;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.wikinest-editor__content .ProseMirror h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 2em;
+}
+
+.wikinest-editor__content .ProseMirror h2 {
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #eef0f2;
+  font-size: 1.55em;
+}
+
+.wikinest-editor__content .ProseMirror h3 { font-size: 1.28em; }
+.wikinest-editor__content .ProseMirror h4 { font-size: 1.08em; }
+
+.wikinest-editor__content .ProseMirror blockquote {
+  margin: 1.2em 0;
+  padding: 0.2em 1em;
+  border-left: 4px solid #d0d7de;
+  color: #57606a;
+  background: #f6f8fa;
+}
+
+.wikinest-editor__content .ProseMirror blockquote > :first-child { margin-top: 0.45em; }
+.wikinest-editor__content .ProseMirror blockquote > :last-child { margin-bottom: 0.45em; }
+
+.wikinest-editor__content .ProseMirror ul,
+.wikinest-editor__content .ProseMirror ol {
+  margin: 0.8em 0;
+  padding-left: 2em;
+}
+
+.wikinest-editor__content .ProseMirror li + li {
+  margin-top: 0.25em;
+}
+
+.wikinest-editor__content .ProseMirror li > p {
+  margin: 0.25em 0;
+}
+
+.wikinest-editor__content .ProseMirror table {
+  width: 100%;
+  margin: 1.35em 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 0.94em;
+  line-height: 1.55;
+}
+
+.wikinest-editor__content .ProseMirror th,
+.wikinest-editor__content .ProseMirror td {
+  min-width: 88px;
+  padding: 8px 12px;
+  border: 1px solid #d0d7de;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.wikinest-editor__content .ProseMirror th {
+  color: #24292f;
+  background: #f6f8fa;
+  font-weight: 650;
+}
+
+.wikinest-editor__content .ProseMirror tr:nth-child(even) td {
+  background: #fbfcfd;
+}
+
+.wikinest-editor__content .ProseMirror .selectedCell {
+  position: relative;
+  background: #eaf2ff;
+}
+
+.wikinest-editor__content .ProseMirror .selectedCell::after {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #4f8ff7;
+  pointer-events: none;
+  content: "";
+}
+
+.wikinest-editor__content .ProseMirror code {
+  padding: 0.16em 0.36em;
+  border-radius: 4px;
+  background: #eff1f3;
+  font: 0.88em/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.wikinest-editor__content .ProseMirror pre {
+  overflow: auto;
+  margin: 1.1em 0;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #f6f8fa;
+  line-height: 1.55;
+}
+
+.wikinest-editor__content .ProseMirror pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.9em;
+}
+
+.wikinest-editor__content .ProseMirror a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+.wikinest-editor__content .ProseMirror a:hover {
+  text-decoration: underline;
+}
+
+.wikinest-editor__content .ProseMirror hr {
+  height: 1px;
+  margin: 2em 0;
+  border: 0;
+  background: #d8dee4;
+}
+
+.wikinest-editor__content .ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.25em auto;
+  border-radius: 6px;
+}
+
+.wikinest-editor__content .ProseMirror input[type="checkbox"] {
+  margin: 0 0.45em 0.2em 0;
+  vertical-align: middle;
+}
+
+.wikinest-upload-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px dashed #9ca3af;
+  border-radius: 6px;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.wikinest-upload-placeholder button {
+  color: #0969da;
+}
+
+.wikinest-mermaid {
+  margin: 1.25em 0;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .wikinest-editor__content {
+    padding: 0 12px;
+  }
+
+  .wikinest-editor__content .ProseMirror {
+    padding: 20px 2px 72px;
+    font-size: 15px;
+  }
+
+  .wikinest-editor__content .ProseMirror th,
+  .wikinest-editor__content .ProseMirror td {
+    min-width: 72px;
+    padding: 7px 9px;
+  }
+}

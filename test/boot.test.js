@@ -1,6 +1,19 @@
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer } from '../src/web/server.js';
+
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+
+before(() => {
+  console.log = () => {};
+  console.warn = () => {};
+});
+
+after(() => {
+  console.log = originalConsoleLog;
+  console.warn = originalConsoleWarn;
+});
 
 test('startServer binds to 127.0.0.1 and assigns a free port', async () => {
   const server = await startServer({ port: 0, host: '127.0.0.1' });

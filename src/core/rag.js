@@ -20,6 +20,7 @@ import {
   noModelOutputMessageForDocuments,
   referenceHeadingForDocuments,
 } from './prompts.js';
+import { CONTENT_KINDS, contentKind } from './content-kind.js';
 
 const INDEX_DIR = path.join(CONTENT_DIR, '.index');
 const INDEX_FILE = path.join(INDEX_DIR, 'embeddings.json');
@@ -53,6 +54,23 @@ export function chunkText(content) {
   }
   if (buf) chunks.push(buf);
   return chunks.slice(0, MAX_CHUNKS_PER_NOTE);
+}
+
+/**
+ * A bookmark's body is just a link, so its meaning lives in the frontmatter the
+ * capture pipeline generates. Embedding that makes saved URLs answerable.
+ */
+function indexableText(note) {
+  if (contentKind(note.data) !== CONTENT_KINDS.BOOKMARK) return note.content;
+  const tags = Array.isArray(note.data.tags) ? note.data.tags : [note.data.tags];
+  return [
+    note.data.summary,
+    note.data.description,
+    tags.filter((tag) => typeof tag === 'string' && tag.trim()).join('、'),
+    note.data.siteName || note.data.domain,
+    note.data.canonicalUrl || note.data.url,
+    note.content,
+  ].filter((value) => typeof value === 'string' && value.trim()).join('\n\n');
 }
 
 // ---- index persistence (in-memory cache backed by a JSON file) ----
@@ -105,7 +123,7 @@ export async function syncIndex() {
       if (existing && existing.mtimeMs === n.mtimeMs) continue; // unchanged
       const name = n.path.split('/').pop().replace(/\.md$/, '');
       const title = (n.data.title || name).toString();
-      const texts = chunkText(n.content);
+      const texts = chunkText(indexableText(n));
       if (!texts.length) { idx.notes[n.path] = { mtimeMs: n.mtimeMs, title, chunks: [] }; continue; }
       pending.push({
         path: n.path,

@@ -4,6 +4,7 @@
 import { readNote, listCategories, setNoteCategories, normalizeCategoryList } from './store.js';
 import { chat, extractJson, isLLMConfigured } from './llm.js';
 import { SINGLE_SOURCE_LANGUAGE_RULE } from './prompts.js';
+import { CONTENT_KINDS, contentKind } from './content-kind.js';
 
 const MAX_CONTENT_CHARS = 4000;
 const MAX_CATEGORIES = 3;
@@ -69,6 +70,7 @@ export async function classifyNote({ title = '', content = '', existingCategorie
  */
 export async function classifyAndSet(savedPath) {
   const { data, content } = await readNote(savedPath);
+  if (contentKind(data) !== CONTENT_KINDS.NOTE) return [];
   const existing = (await listCategories()).map((c) => c.name);
   const cats = await classifyNote({
     title: (data.title || '').toString(),
@@ -89,6 +91,7 @@ export async function autoTagIfEmpty(savedPath) {
   if (!isClassifyConfigured()) return [];
   try {
     const { data } = await readNote(savedPath);
+    if (contentKind(data) !== CONTENT_KINDS.NOTE) return [];
     const current = normalizeCategoryList(data.categories);
     if (current.length) return current;
     return await classifyAndSet(savedPath);

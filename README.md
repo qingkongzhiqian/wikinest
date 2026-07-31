@@ -62,7 +62,9 @@ You and your AI can recall it later
 
 ### Capture without preparing
 
-Write in the editor, paste a wall of text, use the CLI, or tell an AI assistant to save the current conversation through MCP.
+Write in the editor, paste a wall of text, capture a bookmark or selection from
+your browser, use the CLI, or tell an AI assistant to save the current
+conversation through MCP.
 
 No folder decision. No tag ritual. No need to make the note presentable before it deserves to exist.
 
@@ -94,7 +96,7 @@ Wikinest gives them a durable memory layer:
 - answers stay grounded in your original notes;
 - useful conclusions stop disappearing with the chat window.
 
-Your knowledge is still stored as ordinary `.md` files in a folder you choose. There is no proprietary database and no platform lock-in. Open the files with another editor, back them up, sync them, or put them in Git.
+Your knowledge is still stored as ordinary `.md` files in a folder you choose. There is no proprietary database and no platform lock-in. Open the files with another editor, back them up, or use the desktop app's built-in Vault sync.
 
 ## What you get
 
@@ -107,25 +109,57 @@ Your knowledge is still stored as ordinary `.md` files in a folder you choose. T
 - **AI synthesis** — turn notes from a category or selection into a coherent article.
 - **Built-in MCP** — connect Cursor, Claude Code, and other MCP clients.
 - **Image upload** — paste or drop images into any S3-compatible storage.
+- **Encrypted Vault sync** — synchronize Markdown between desktop devices through S3-compatible object storage.
+- **Unified Markdown editor** — edit rendered Markdown directly, with source fallback for unsupported or malformed documents.
+- **Browser capture (beta)** — save bookmarks or review selected text in a Chrome/Edge side panel before writing it as Markdown.
 - **English and Simplified Chinese UI** — switch languages from Settings.
 - **Desktop, Web, Docker, and CLI** — one knowledge base, multiple ways to use it.
 
 > No API key is required to use Wikinest as a fast local Markdown wiki. AI features appear when you configure a compatible model.
 
+## Edit Markdown directly
+
+The desktop app remains an Electron app. Open a note and edit its rendered Markdown immediately—there is no separate Edit/Preview workflow for supported content. The editor saves after 800 ms of inactivity; press `Cmd/Ctrl+S` to save immediately. It serializes the document back to Markdown, so equivalent list markers, emphasis delimiters, whitespace, indentation, and table layout may be normalized on save.
+
+Supported editing includes GFM headings, lists and task items, links, tables, fenced code blocks, images, and Mermaid. Mermaid keeps its source available for editing, including when a diagram cannot render. Use **View Markdown source** when a document cannot be parsed, the editor fails to initialize, or specialized Markdown needs source-level repair.
+
+Each save carries the version read with the note. If the file changed outside the current editor, Wikinest retains your draft rather than overwriting the other version and creates a conflict-copy Markdown file. Before switching notes or quitting, the app flushes pending saves.
+
+AI is selection-first: with a non-empty editor selection, only that selection is sent by default. AI replacements and inserts are applied only when their captured selection is still current, remain undoable, and then follow the normal save and conflict checks.
+
+## Capture from Chrome or Edge
+
+The repository includes the open-source **Wikinest Web Capture** extension under
+[`browser-extension/`](./browser-extension). It is currently distributed as an
+unpacked beta:
+
+1. Start Wikinest Desktop so the local service is available at `http://127.0.0.1:4321`.
+2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
+3. Choose **Load unpacked** and select the repository's `browser-extension` directory.
+
+Use the side panel to save the current URL, collect a selected passage, or review
+AI translation, summary, key points, explanation, and question-answering output
+before saving. Bookmarks and confirmed clips remain ordinary Markdown under
+`bookmarks/` and `clips/`. Extension model credentials are optional and stay in
+browser-local storage. See the [extension README](./browser-extension/README.md)
+for shortcuts and details.
+
 ## Download the desktop app
 
-The latest release is [Wikinest 1.0.1](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.0.1) for macOS. Choose the installer that matches your Mac:
+The current linked release, [Wikinest 1.1.0](https://github.com/qingkongzhiqian/wikinest/releases/tag/v1.1.0), is for macOS. Choose the installer that matches your Mac:
 
 | Mac | Download |
 | --- | --- |
-| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1-arm64.dmg) |
-| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.0.1/Wikinest-1.0.1.dmg) |
+| Apple Silicon — M1, M2, M3, M4, or M5 | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0-arm64.dmg) |
+| Intel | [Download DMG](https://github.com/qingkongzhiqian/wikinest/releases/download/v1.1.0/Wikinest-1.1.0.dmg) |
 
 Both installers are signed with the Developer ID of Wise Future Innovations Limited. This build is not notarized yet, so on first launch right-click the app and choose **Open** (or allow it under **System Settings → Privacy & Security**).
 
+Windows and Linux are supported build targets; no Windows or Linux installer is linked as a published release here. You can build those targets yourself from source.
+
 Open the downloaded DMG, drag Wikinest into **Applications**, and launch it. On first launch, choose a folder as your Vault. Wikinest remembers it and lets you switch Vaults later through **File → Open Folder…** or **Open Recent**.
 
-Configure language, models, embeddings, image storage, and your local MCP connection from **Settings**.
+Configure language, models, embeddings, image storage, Vault sync, and your local MCP connection from **Settings**.
 
 ### Run from source
 
@@ -137,6 +171,49 @@ cd wikinest
 npm install
 npm run desktop
 ```
+
+## Sync a desktop Vault
+
+The desktop app can synchronize a Vault in both directions through AWS S3 or an
+S3-compatible object store that honors conditional object creation with
+`If-None-Match: *`. Provider presets are available for Cloudflare R2, Alibaba
+Cloud OSS, and MinIO, but compatibility depends on the provider version and
+configuration. Vault sync is configured per Vault and is completely separate
+from image storage: image `S3_*` settings and image objects are not reused.
+
+Only `.md` files are synchronized. Wikinest does not upload `.index/`, local settings or sync state, or image objects referenced by notes.
+
+### Set up your devices
+
+1. On the first device, open **Settings → Vault Sync**, select the provider, and enter its endpoint/region, bucket, prefix, access credentials, and an optional sync password.
+2. Test the connection, then save and enable sync. Wait for this device's first successful sync before configuring another device.
+3. On every later device, open the local Vault that should participate and configure exactly the same endpoint/region, bucket, prefix, and sync password.
+
+Use a private bucket and credentials limited to the chosen prefix with only the permissions Wikinest needs: read, write, delete, and list. For AWS IAM this includes `s3:ListBucket` (used through `ListObjectsV2`) on the bucket as well as object permissions under the prefix. The connection test writes, reads, lists, and deletes a temporary probe. Desktop credentials are stored with the operating system's secure storage. Do not put Vault sync credentials in `.env`.
+
+### Encryption and initialized prefixes
+
+An empty sync password stores note paths and contents in plaintext in the bucket. **This is a significant privacy risk**, even with a private bucket. With a password, Wikinest derives a key using scrypt and encrypts both paths and contents with AES-256-GCM. The password is never recoverable; if every configured device forgets it, the remote data cannot be decrypted.
+
+Sync protocol v1 initializes an empty prefix with a conditional write, so only
+one remote manifest can win when first devices race. Backends that ignore or
+reject `If-None-Match: *` are not supported for Vault sync. Still wait for the
+first device's complete successful sync before configuring later devices; this
+avoids competing first uploads and gives you a clear recovery point if provider
+compatibility or credentials are wrong.
+
+The first device initializes the prefix as either plaintext or password-encrypted. That prefix's mode and password cannot be changed in place. To switch mode/password or migrate to another remote, configure a new, empty prefix on the first device only. Wikinest creates independent local sync state for the new remote identity and uploads the current local `.md` files as the new Vault's initial contents; it does not reference blobs from the old prefix. After that first sync succeeds, configure the remaining devices. The old prefix is retained and is never deleted automatically.
+
+### Timing and behavior
+
+- Sync runs when the Vault starts, every 60 seconds, about 2 seconds after a local write, and once more during exit with a maximum wait of 15 seconds.
+- Offline and transient failures leave local notes intact and are retried by later sync runs.
+- Concurrent edits are preserved as conflict-copy Markdown files rather than silently overwriting one version.
+- Deletes and renames are synchronized. A rename is represented as a deletion plus a new path, so concurrent offline changes may produce a conflict copy.
+- Sync protocol v1 uses an append-only remote operation log and does not garbage-collect old remote log objects.
+- Run only one Wikinest instance per device for a given Vault. Each device must have a single writer for its local sync state.
+
+Do not use Git, iCloud Drive, Dropbox, OneDrive, or another folder-sync tool on the same Vault while Vault sync is enabled. Two independent synchronizers can race and create duplicate, resurrected, or conflicting files. Normal editing is supported, and Wikinest checks for external changes before materializing remote content. However, POSIX/Node provides no portable atomic file compare-and-swap: a third-party write at the exact sync-materialization commit instant cannot receive a strong cross-process transactional guarantee. While sync is enabled, do not let another synchronizer or auto-save tool concurrently modify the same file.
 
 ## Connect Cursor or Claude Code
 
@@ -172,6 +249,26 @@ LLM_MODEL=your-model
 ```
 
 Embeddings power semantic search and knowledge-base Q&A. They reuse the LLM configuration when possible, or can be configured separately with `EMBED_*`.
+
+### Use the AI assistant
+
+When the assistant is collapsed, open it from the floating button centered on the right edge anywhere in Wikinest. It reuses your existing `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` configuration and supports multiple temporary threads.
+
+On wide screens, the assistant opens as a content-pushing drawer instead of covering the page. Its width defaults to 380px and can be resized from 320px to 560px. On narrow screens, it opens as a dedicated assistant view so the conversation has the full viewport.
+
+Context is selection-first:
+
+- **Selection** — by default, Wikinest sends only the selection. Explicitly enable **Include full note** to also send the complete draft. This permission is momentary and resets when leaving the selection context. Selection responses can be copied, used to replace the captured selection, or inserted after it.
+- **Document** — while reading a note, or editing without a selection, Wikinest sends the current note to help summarize, explain, or answer questions about it. Document responses can be copied but cannot be written back automatically.
+- **General** — from the index or another view without document context, Wikinest does not send note content.
+
+The configured model provider receives your instruction, eligible history from the current temporary thread, and only the context authorized for that request. Keep requests focused and do not send sensitive content unless you trust the provider and its data-handling policy.
+
+Failures identify rate limiting (`429`), authentication or API-key problems, an unavailable or invalid model, network connectivity problems, and request timeouts. **Retry** is always a manual action and recaptures the selection, note authorization, and other current context at retry time instead of resending a stale snapshot.
+
+Threads and drawer width exist only in memory. Threads disappear, and the width returns to its 380px default, when the page refreshes or the app exits. Neither is written to the Vault or synchronized through object storage.
+
+Selection write-back is guarded: Wikinest applies a result only when the original selection and draft identity still match. If either changed while the model was responding, replace and insert are rejected so newer edits are not overwritten; copying remains available. AI output is never saved automatically—review the result and save the note yourself.
 
 Image uploads support AWS S3, Cloudflare R2, Alibaba Cloud OSS, MinIO, and other S3-compatible services. See [`.env.example`](./.env.example) for all options.
 
